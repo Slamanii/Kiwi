@@ -1,0 +1,26 @@
+{
+  "name": "@kiwi/api",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/app.ts",
+    "build": "tsc",
+    "start": "node dist/app.js"
+  },
+  "dependencies": {
+    "@kiwi/types": "*",
+    "@kiwi/db": "*",
+    "express": "^4",
+    "cors": "^2",
+    "dotenv": "^16",
+    "zod": "^3",
+    "jsonwebtoken": "^9"
+  },
+  "devDependencies": {
+    "@types/express": "^4",
+    "@types/cors": "^2",
+    "@types/jsonwebtoken": "^9",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

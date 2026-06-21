@@ -1,0 +1,441 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum UserRole {
+  CLIENT
+  AGENT
+  LAWYER
+  DEVELOPER
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
+enum SeekType {
+  LOOKING_TO_RENT
+  LOOKING_TO_BUY
+  PROPERTY_FOR_RENT
+  PROPERTY_FOR_SALE
+}
+
+enum SeekStatus {
+  OPEN
+  SELECTING
+  CLOSED
+  EXPIRED
+}
+
+enum PropertyType {
+  LOFT
+  MINI_FLAT
+  DUPLEX
+  BUNGALOW
+  BQ
+  STORE
+  OFFICE
+}
+
+enum UrgencyLevel {
+  NORMAL
+  URGENT
+}
+
+enum BidStatus {
+  PENDING
+  SELECTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ThreadStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum AgreementStatus {
+  PENDING
+  SIGNED
+  ESCROW_FUNDED
+  IN_PROGRESS
+  COMPLETED
+  DISPUTED
+}
+
+enum TransactionType {
+  ESCROW_DEPOSIT
+  ESCROW_RELEASE
+  VAULT_DEPOSIT
+  VAULT_WITHDRAWAL
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REVERSED
+}
+
+enum NotificationType {
+  NEW_BID
+  BID_SELECTED
+  BID_REJECTED
+  NEW_MESSAGE
+  AGREEMENT_SENT
+  AGREEMENT_SIGNED
+  ESCROW_FUNDED
+  DEAL_COMPLETED
+  NEW_RESEEK
+  SYSTEM
+}
+
+enum ReportReason {
+  FRAUD
+  MISREPRESENTATION
+  HARASSMENT
+  FAKE_PROFILE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum MessageType {
+  TEXT
+  AUDIO
+  FILE
+  VIDEO
+}
+
+// ─── MODELS ──────────────────────────────────────────────
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  phone              String?            @unique
+  passwordHash       String
+  name               String
+  roles              UserRole[]
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  subscriptionTier   SubscriptionTier   @default(FREE)
+  referralCode    String?  @unique
+  referredBy      String?
+  referralCount   Int      @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  profile                Profile?
+  seeks                  Seek[]
+  bids                   Bid[]
+  threadsAsClient        Thread[]           @relation("ClientThreads")
+  threadsAsAgent         Thread[]           @relation("AgentThreads")
+  messagesSent           Message[]
+  notifications          Notification[]
+  transactions           Transaction[]
+  referralsMade   Referral[]  @relation("ReferralsMade")
+  referralReceived Referral?  @relation("ReferredBy")
+  reportsSubmitted       Report[]           @relation("ReportSubmitter")
+  reportsReceived        Report[]           @relation("ReportTarget")
+  directMessagesSent     DirectMessage[]    @relation("DMSender")
+  directMessagesReceived DirectMessage[]    @relation("DMReceiver")
+  communitiesCreated     Community[]
+  communities            CommunityMember[]
+  communityMessages      CommunityMessage[]
+}
+
+model Profile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  bio          String?
+  avatarUrl    String?
+  location     String?
+  zone         String?
+  rate         Float?
+  policyNote   String?
+  completedDeals Int    @default(0)
+  rating       Float    @default(0)
+  reviewCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Seek {
+  id           String        @id @default(cuid())
+  authorId     String
+  content      String
+  type         SeekType
+  status       SeekStatus    @default(OPEN)
+  propertyType PropertyType?
+  budget       Float?
+  location     String?
+  zone         String?
+  urgency      UrgencyLevel  @default(NORMAL)
+  rooms        Int?
+  isSingle     Boolean?
+  hasPets      Boolean?
+  likeCount    Int           @default(0)
+  reseekCount  Int           @default(0)
+  bidCount     Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  expiresAt    DateTime?
+
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  bids      Bid[]
+  threads   Thread[]
+  likes     SeekLike[]
+  reseeks   SeekReseek[]
+  bookmarks SeekBookmark[]
+}
+
+model SeekLike {
+  id        String   @id @default(cuid())
+  seekId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  seek Seek @relation(fields: [seekId], references: [id], onDelete: Cascade)
+
+  @@unique([seekId, userId])
+}
+
+model SeekReseek {
+  id        String   @id @default(cuid())
+  seekId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  seek Seek @relation(fields: [seekId], references: [id], onDelete: Cascade)
+
+  @@unique([seekId, userId])
+}
+
+model SeekBookmark {
+  id        String   @id @default(cuid())
+  seekId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  seek Seek @relation(fields: [seekId], references: [id], onDelete: Cascade)
+
+  @@unique([seekId, userId])
+}
+
+model Bid {
+  id        String    @id @default(cuid())
+  seekId    String
+  agentId   String
+  rate      Float
+  message   String
+  status    BidStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  seek  Seek @relation(fields: [seekId], references: [id], onDelete: Cascade)
+  agent User @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([seekId, agentId])
+}
+
+model Thread {
+  id        String       @id @default(cuid())
+  seekId    String
+  clientId  String
+  agentId   String
+  status    ThreadStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  seek      Seek       @relation(fields: [seekId], references: [id], onDelete: Cascade)
+  client    User       @relation("ClientThreads", fields: [clientId], references: [id])
+  agent     User       @relation("AgentThreads", fields: [agentId], references: [id])
+  messages  Message[]
+  agreement Agreement?
+
+  @@unique([seekId, agentId])
+}
+
+model Message {
+  id            String      @id @default(cuid())
+  threadId      String
+  senderId      String
+  type          MessageType @default(TEXT)
+  content       String?
+  mediaUrl      String?
+  mediaSize     Int?
+  mediaDuration Int?
+  fileName      String?
+  createdAt     DateTime    @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User   @relation(fields: [senderId], references: [id])
+}
+
+model Agreement {
+  id        String          @id @default(cuid())
+  threadId  String          @unique
+  status    AgreementStatus @default(PENDING)
+  agentFee  Float
+  escrowRef String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  thread      Thread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  items       AgreementItem[]
+  transaction Transaction?
+}
+
+model AgreementItem {
+  id          String    @id @default(cuid())
+  agreementId String
+  requirement String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  agreementId String?           @unique
+  type        TransactionType
+  status      TransactionStatus @default(PENDING)
+  amount      Float
+  currency    String            @default("NGN")
+  reference   String            @unique
+  providerRef String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id])
+  agreement Agreement? @relation(fields: [agreementId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  body      String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  submitterId String
+  targetId    String
+  reason      ReportReason
+  status      ReportStatus @default(OPEN)
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  submitter User @relation("ReportSubmitter", fields: [submitterId], references: [id])
+  target    User @relation("ReportTarget", fields: [targetId], references: [id])
+}
+
+model Community {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  creatorId   String
+  isPrivate   Boolean  @default(false)
+  memberCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator  User               @relation(fields: [creatorId], references: [id])
+  members  CommunityMember[]
+  messages CommunityMessage[]
+}
+
+model CommunityMember {
+  id          String   @id @default(cuid())
+  communityId String
+  userId      String
+  joinedAt    DateTime @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+}
+
+model CommunityMessage {
+  id          String      @id @default(cuid())
+  communityId String
+  senderId    String
+  type        MessageType @default(TEXT)
+  content     String?
+  mediaUrl    String?
+  mediaSize   Int?
+  mediaDuration Int?
+  fileName    String?
+  createdAt   DateTime    @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  sender    User      @relation(fields: [senderId], references: [id])
+}
+
+model DirectMessage {
+  id         String      @id @default(cuid())
+  senderId   String
+  receiverId String
+  type       MessageType @default(TEXT)
+  content    String?
+  mediaUrl   String?
+  mediaSize  Int?
+  mediaDuration Int?
+  fileName   String?
+  read       Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+
+  sender   User @relation("DMSender", fields: [senderId], references: [id])
+  receiver User @relation("DMReceiver", fields: [receiverId], references: [id])
+}
+
+model Referral {
+  id          String   @id @default(cuid())
+  referrerId  String
+  referredId  String   @unique
+  createdAt   DateTime @default(now())
+  paid        Boolean  @default(false)
+  paidAt      DateTime?
+
+  referrer    User     @relation("ReferralsMade", fields: [referrerId], references: [id])
+  referred    User     @relation("ReferredBy", fields: [referredId], references: [id])
+}

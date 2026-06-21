@@ -1,0 +1,20 @@
+{
+    "name": "@kiwi/db",
+    "version": "0.0.1",
+    "type": "module",
+    "main": "./index.ts",
+    "exports": {
+        ".": "./index.ts"
+    },
+    "scripts": {
+    "migrate": "dotenv -e ../../.env -- prisma migrate dev --name",
+    "generate": "dotenv -e ../../.env -- prisma generate",
+    "studio": "dotenv -e ../../.env -- prisma studio"
+    },
+    "dependencies": {
+        "@prisma/client": "^5.22.0"
+    },
+    "devDependencies": {
+        "prisma": "^5.22.0"
+    }
+}
