@@ -14,11 +14,13 @@
     "next": "^15",
     "react": "^19",
     "react-dom": "^19",
+    "socket.io-client": "^4.8.3",
     "zod": "^3"
   },
   "devDependencies": {
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@kiwi/tsconfig": "*"
   }
 }
