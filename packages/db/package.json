@@ -1,7 +1,6 @@
 {
     "name": "@kiwi/db",
     "version": "0.0.1",
-    "type": "module",
     "main": "./index.ts",
     "exports": {
         ".": "./index.ts"
@@ -15,6 +14,7 @@
         "@prisma/client": "^5.22.0"
     },
     "devDependencies": {
-        "prisma": "^5.22.0"
+        "prisma": "^5.22.0",
+        "@types/node": "^20"
     }
 }

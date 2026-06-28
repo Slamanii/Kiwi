@@ -1,24 +1,232 @@
-import { Response, Request, NextFunction } from 'express'
 import { prisma } from '@kiwi/db'
 import { hashPassword, comparePassword } from '../utils/hash.js'
-import { generateAccessToken, generateRefreshToken, verifyAccessToken } from '../utils/jwt.js'
+import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js'
 import { UserRole } from '@kiwi/types'
 import { config } from '../config.js'
-import type { SignupInput, LoginInput } from '@kiwi/types'
+import type { SignupInput, LoginInput, BecomeAnAgentRequest } from '@kiwi/types'
+import crypto from 'crypto'
+import { sendPasswordResetEmail } from './email.js'
 
 
-export async function loginOrSignup(email: string, password: string) {
+
+
+
+function generateReferralCode(): string {
+    const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789'
+    return Array.from({ length: 6 }, () => 
+    chars[Math.floor(Math.random() * chars.length)]
+    ).join('')
+}
+
+export async function signUp(input: SignupInput) {
+    const { name, email, password } = input
+
+    const existing = await prisma.user.findUnique({ where: { email }})
+    if (existing) {
+        return login({ email, password })
+    }
+
+    const passwordHash = await hashPassword(password) 
+    const newReferralCode = generateReferralCode()
+
+    const user = await prisma.$transaction(async (tx: any) => {
+        const created = await tx.user.create({
+            data: {
+                name,
+                email,
+                password: passwordHash,
+                roles: [UserRole.CLIENT],
+                referralCode: newReferralCode,
+                referredBy: null,
+                profile: {
+                    create: {}
+                }
+            },
+            include: { profile: true }            
+        })
+       
+        return created
+    })
+
+        const tokens = signTokens(user.id, user.roles)
+
+        return { user, tokens }
+    
+}
+
+export async function requestPasswordReset(email: string) {
+    const user = await prisma.user.findUnique({ where: { email }})
+
+    if (!user) return
+
+    const resetToken = crypto.randomBytes(32).toString('hex')
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000)
+
+    await prisma.user.update({
+        where: { email },
+        data: { resetToken, resetTokenExpiry }
+    })
+
+    await sendPasswordResetEmail(email, resetToken)
 
 }
+
+
 
 export async function resetPassword(email: string, newPassword:string, resetToken: string) {
 
-    const { data: record } = await prisma.user.findUnique({
-        where: { email, equals: email } && { resetToken, equals: resetToken }
+    const user = await prisma.user.findUnique({
+        where: { email }
+    })
 
-        if (!record) {
+        if (!user || user.resetToken !== resetToken) {
             throw new Error("Invalid email or reset token");    
         }
-        const passwordHash = await hashPassword(newPassword)
+
+        if (!user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
+            throw new Error('Reset token has expired')
+        }
+
+        const passwordHash = await hashPassword(newPassword);
+        await prisma.user.update({
+            where: { email },
+            data: { password: passwordHash, resetToken: null, resetTokenExpiry: null }
+        })
+        
+    }
+
+
+export async function login(input: LoginInput) {
+    const { email, password } = input
+
+    const user = await prisma.user.findUnique({
+        where: { email },
+        include: { profile: true}
     })
+
+    if (!user) throw new Error('Invalid email or password')
+
+        const valid = await comparePassword(password, user.passwordHash)
+        if (!valid) throw new Error("Invalid email or password")
+
+            const access_tokens = signTokens(user.id, user.roles)
+
+        return { user, access_tokens }
+} 
+
+function signTokens(userId: string, roles: UserRole[]) {
+    const payload = { userId, roles }
+
+    const accessToken = generateAccessToken(
+        payload,
+        config.JWT_SECRET,
+        '15m'
+    )
+
+    const refreshToken = generateRefreshToken(
+        payload,
+        config.JWT_SECRET,
+        '30d'
+    )
+
+    return { accessToken, refreshToken}
 }
+
+export async function becomeAnAgent(request: BecomeAnAgentRequest) {
+    const { userId, zone, rate, policyNote, idType, idNumber, idDocumentUrl, bio, phone, agentReferralCode } = request
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId }
+    })
+    if (!user) throw new Error("User not found")
+        
+    if (user.roles.includes(UserRole.AGENT)) {
+        throw new Error("User is already an agent")
+    }
+
+    const existingApplication = await prisma.agentApplication.findUnique({ where: { userId } })
+    if (existingApplication) {
+        throw new Error("Application already Submitted, sit tight😁")
+    }
+    let referrer = null
+
+        if (agentReferralCode) {
+            referrer = await prisma.user.findFirst({ where: { referralCode: agentReferralCode, roles: { has: UserRole.AGENT} } })
+            if (!referrer) throw new Error("Invalid referral Code")
+        }
+
+    const application = await prisma.$transaction(async (tx: any) => {
+        const app = await tx.agentApplication.create({
+            data: {
+                userId,
+                zone,
+                rate,
+                policyNote,
+                idType,
+                idNumber,
+                idDocumentUrl,
+                agentReferralCode,
+            }
+        })
+
+
+        await tx.profile.update({
+            where: { userId },
+            data: {
+                bio: bio ?? undefined,
+                zone,
+                rate,
+                policyNote,
+            }
+        })
+        if (referrer) {
+            await tx.referral.create({
+                data: {
+                    referrerId: referrer.id,
+                    referredId: userId
+                }
+            })
+
+            await tx.user.update({
+                where: { id: referrer.id},
+                data: { referralCount: { increment: 1} }
+            })
+        }
+        await tx.user.update({
+            where: { id: userId },
+            data: {
+                phone: phone ?? undefined,
+                referredBy: referrer?.id ?? undefined
+            }
+        })
+
+        return app
+    })
+
+    return application
+}
+
+export async function approveAgentApplication(applicationId: string) {
+    const application = await prisma.agentApplication.findUnique({
+        where: { id: applicationId }
+    })
+
+    if (!application) throw new Error('Application not found')
+    if (application.status !== 'PENDING') throw new Error('Application already reviewed')
+
+        await prisma.$transaction(async (tx: any) => {
+            await tx.agentApplication.update({
+                where: { id: applicationId },
+                data: { status: 'APPROVED', reviewedAt: new Date() }
+            })
+
+            await tx.user.update({
+                where: { id: application.userId },
+                data: {
+                    roles: { push: UserRole.AGENT }
+                }
+            })
+        })
+}
+
+//delete account

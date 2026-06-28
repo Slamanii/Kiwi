@@ -5,7 +5,6 @@ export interface SignupInput {
   name: string
   email: string
   password: string
-  referralCode?: string
 }
 
 export interface LoginInput {
@@ -22,4 +21,20 @@ export interface AuthTokens {
 export interface AuthResponse {
   user: User
   tokens: AuthTokens
+}
+
+export interface BecomeAnAgentRequest {
+  userId: string
+  zone: string          
+  rate: number           
+  policyNote: string   
+  idType: string  
+  idNumber: string
+  idDocumentUrl: string  
+  accountNumber: string
+  bankCode: string
+  accountName: string
+  bio?: string
+  phone?: string 
+  agentReferralCode?: string      
 }

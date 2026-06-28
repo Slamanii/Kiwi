@@ -1,0 +1,13 @@
+export const NotificationType = {
+  NEW_BID: 'NEW_BID',
+  BID_SELECTED: 'BID_SELECTED',
+  BID_REJECTED: 'BID_REJECTED',
+  NEW_MESSAGE: 'NEW_MESSAGE',
+  AGREEMENT_SENT: 'AGREEMENT_SENT',
+  AGREEMENT_SIGNED: 'AGREEMENT_SIGNED',
+  ESCROW_FUNDED: 'ESCROW_FUNDED',
+  DEAL_COMPLETED: 'DEAL_COMPLETED',
+  NEW_RESEEK: 'NEW_RESEEK',
+  SYSTEM: 'SYSTEM'
+} as const
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType]

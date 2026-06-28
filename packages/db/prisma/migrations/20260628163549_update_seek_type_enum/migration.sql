@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "SeekType" ADD VALUE 'INFO';
+
+-- AlterTable
+ALTER TABLE "Seek" ALTER COLUMN "type" SET DEFAULT 'LOOKING_TO_RENT';

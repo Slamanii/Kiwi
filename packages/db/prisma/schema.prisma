@@ -23,6 +23,12 @@ enum UserRole {
   DEVELOPER
 }
 
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum VerificationStatus {
   UNVERIFIED
   PENDING
@@ -39,6 +45,7 @@ enum SeekType {
   LOOKING_TO_BUY
   PROPERTY_FOR_RENT
   PROPERTY_FOR_SALE
+  INFO
 }
 
 enum SeekStatus {
@@ -46,6 +53,7 @@ enum SeekStatus {
   SELECTING
   CLOSED
   EXPIRED
+  DEPRECATED
 }
 
 enum PropertyType {
@@ -83,6 +91,12 @@ enum AgreementStatus {
   IN_PROGRESS
   COMPLETED
   DISPUTED
+}
+
+enum AgreementStage {
+  BEFORE    
+  DURING     
+  AFTER     
 }
 
 enum TransactionType {
@@ -134,6 +148,19 @@ enum MessageType {
   VIDEO
 }
 
+enum CommunityRole {
+  ADMIN
+  MEMBER
+}
+
+enum CommunityMessagingMode {
+  ADMIN_ONLY
+  ALL_MEMBERS
+  SELECTED_MEMBERS
+}
+
+
+
 // ─── MODELS ──────────────────────────────────────────────
 
 model User {
@@ -143,15 +170,23 @@ model User {
   passwordHash       String
   name               String
   roles              UserRole[]
+  comments           SeekComment[]
   verificationStatus VerificationStatus @default(UNVERIFIED)
   subscriptionTier   SubscriptionTier   @default(FREE)
   referralCode    String?  @unique
   referredBy      String?
   referralCount   Int      @default(0)
+  accountNumber         String?
+  bankCode              String?
+  accountName           String?
+  paystackRecipientCode String?
+  resetToken      String?
+  resetTokenExpiry DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   profile                Profile?
+  agentApplication       AgentApplication?
   seeks                  Seek[]
   bids                   Bid[]
   threadsAsClient        Thread[]           @relation("ClientThreads")
@@ -168,6 +203,7 @@ model User {
   communitiesCreated     Community[]
   communities            CommunityMember[]
   communityMessages      CommunityMessage[]
+  deviceTokens           DeviceToken[]
 }
 
 model Profile {
@@ -178,9 +214,12 @@ model Profile {
   location     String?
   zone         String?
   rate         Float?
+  inspectionFee Float?
   policyNote   String?
+  requests     Int @default(0)
+  ongoing      Int @default(0)
   completedDeals Int    @default(0)
-  rating       Float    @default(0)
+  rating       Float?    @default(0)
   reviewCount  Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -188,11 +227,35 @@ model Profile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model AgentApplication {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  agentReferralCode  String?
+  phone         String
+  zone          String
+  rate          Float
+  policyNote    String
+  idType        String
+  idNumber      String
+  idDocumentUrl String
+  status        ApplicationStatus @default(PENDING)
+  accountNumber         String
+  bankCode              String
+  accountName           String
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model Seek {
   id           String        @id @default(cuid())
+  isReseek     Boolean       @default(false)
+  originalSeekId String?
   authorId     String
   content      String
-  type         SeekType
+  type         SeekType      @default(LOOKING_TO_RENT)
   status       SeekStatus    @default(OPEN)
   propertyType PropertyType?
   budget       Float?
@@ -202,6 +265,9 @@ model Seek {
   rooms        Int?
   isSingle     Boolean?
   hasPets      Boolean?
+  comments     SeekComment[]
+  commentCount Int           @default(0) 
+  commentsEnabled Boolean     @default(true)   
   likeCount    Int           @default(0)
   reseekCount  Int           @default(0)
   bidCount     Int           @default(0)
@@ -215,6 +281,18 @@ model Seek {
   likes     SeekLike[]
   reseeks   SeekReseek[]
   bookmarks SeekBookmark[]
+}
+
+model SeekComment {
+  id        String   @id @default(cuid())
+  seekId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seek      Seek     @relation(fields: [seekId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SeekLike {
@@ -306,6 +384,11 @@ model Agreement {
   status    AgreementStatus @default(PENDING)
   agentFee  Float
   escrowRef String?
+  documentUrl String?
+  clientSignedAt DateTime?
+  agentSignedAt  DateTime?
+  clientSignature String?
+  agentSignature  String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
@@ -320,6 +403,10 @@ model AgreementItem {
   requirement String
   completed   Boolean   @default(false)
   completedAt DateTime?
+  stage       AgreementStage @default(BEFORE)
+  answer      String?
+  answeredAt  DateTime?
+  answeredBy  String?        
 
   agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
 }
@@ -375,19 +462,24 @@ model Community {
   creatorId   String
   isPrivate   Boolean  @default(false)
   memberCount Int      @default(0)
+  lastMessage  String?
+  lastMessageAt DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   creator  User               @relation(fields: [creatorId], references: [id])
   members  CommunityMember[]
   messages CommunityMessage[]
+  messagingMode CommunityMessagingMode @default(ADMIN_ONLY)
 }
 
 model CommunityMember {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   communityId String
   userId      String
-  joinedAt    DateTime @default(now())
+  role        CommunityRole @default(MEMBER)
+  canPost     Boolean       @default(false)
+  joinedAt    DateTime      @default(now())
 
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -413,6 +505,7 @@ model CommunityMessage {
 
 model DirectMessage {
   id         String      @id @default(cuid())
+  conversationId String
   senderId   String
   receiverId String
   type       MessageType @default(TEXT)
@@ -424,8 +517,23 @@ model DirectMessage {
   read       Boolean     @default(false)
   createdAt  DateTime    @default(now())
 
+  conversation  DMConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender   User @relation("DMSender", fields: [senderId], references: [id])
   receiver User @relation("DMReceiver", fields: [receiverId], references: [id])
+}
+
+
+model DMConversation {
+  id            String   @id @default(cuid())
+  participantA  String
+  participantB  String
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime @default(now())
+
+  messages      DirectMessage[]
+
+  @@unique([participantA, participantB])
 }
 
 model Referral {
@@ -438,4 +546,13 @@ model Referral {
 
   referrer    User     @relation("ReferralsMade", fields: [referrerId], references: [id])
   referred    User     @relation("ReferredBy", fields: [referredId], references: [id])
+}
+
+model DeviceToken {
+  id          String    @id @default(cuid())
+  userId      String
+  token       String    @unique
+  createdAt   DateTime  @default(now()) 
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade) 
 }

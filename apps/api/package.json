@@ -8,17 +8,18 @@
     "start": "node dist/app.js"
   },
   "dependencies": {
-    "@kiwi/types": "*",
     "@kiwi/db": "*",
-    "express": "^4",
+    "@kiwi/types": "*",
     "cors": "^2",
     "dotenv": "^16",
-    "zod": "^3",
-    "jsonwebtoken": "^9"
+    "express": "^4",
+    "firebase-admin": "^13.10.0",
+    "jsonwebtoken": "^9",
+    "zod": "^3"
   },
   "devDependencies": {
-    "@types/express": "^4",
     "@types/cors": "^2",
+    "@types/express": "^4",
     "@types/jsonwebtoken": "^9",
     "tsx": "^4",
     "typescript": "^5"

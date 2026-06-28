@@ -1,4 +1,14 @@
-import { AgreementStatus } from '../enums/agreement.js'
+import { AgreementStatus, AgreementStage } from '../enums/agreement.js'
+
+
+
+export interface CreateAgreementInput {
+  agentFee: number
+  items: {
+    requirement: string
+    stage: AgreementStage
+  }[]
+}
 
 export interface Agreement {
   id: string
@@ -13,4 +23,5 @@ export interface AgreementItem {
   agreementId: string
   requirement: string
   completed: boolean
+
 }
