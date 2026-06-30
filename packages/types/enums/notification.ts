@@ -8,6 +8,8 @@ export const NotificationType = {
   ESCROW_FUNDED: 'ESCROW_FUNDED',
   DEAL_COMPLETED: 'DEAL_COMPLETED',
   NEW_RESEEK: 'NEW_RESEEK',
+  RATING_RECEIVED: 'RATING_RECEIVED',
+  APPLICATION_REJECTED: 'APPLICATION_REJECTED',
   SYSTEM: 'SYSTEM'
 } as const
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType]

@@ -5,13 +5,15 @@ import { UserRole } from '@kiwi/types'
 import { config } from '../config.js'
 import type { SignupInput, LoginInput, BecomeAnAgentRequest } from '@kiwi/types'
 import crypto from 'crypto'
-import { sendPasswordResetEmail } from './email.js'
+import { sendPasswordResetEmail, sendEmailVerificationEmail } from './email.js'
+import { JwtPayload } from 'jsonwebtoken'
+import jwt  from 'jsonwebtoken'
+import bcrypt from 'bcrypt'
 
 
 
 
-
-function generateReferralCode(): string {
+ function generateReferralCode(): string {
     const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789'
     return Array.from({ length: 6 }, () => 
     chars[Math.floor(Math.random() * chars.length)]
@@ -95,6 +97,90 @@ export async function resetPassword(email: string, newPassword:string, resetToke
         
     }
 
+export async function refreshToken(token: string) {
+    let payload: JwtPayload
+    try {
+        payload = jwt.verify(token, config.REFRESH_TOKEN_SECRET) as JwtPayload
+    } catch {
+        throw new Error('Invalid or expired refresh token')
+    }
+
+    const user = await prisma.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true, roles: true, refreshToken: true }
+    })
+    if (!user || user.refreshToken !== token) throw new Error('Refresh token revoked')
+
+        const tokens = signTokens(user.id, user.roles)
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data:  { refreshToken: tokens.refreshToken }
+    })
+        return tokens
+}
+
+export async function changePassword(
+    userId: string,
+    data: { currentPassword: string; newPassword: string}
+) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true }
+    })
+    if (!user) throw new Error('User not found')
+
+    const valid = await bcrypt.compare(data.currentPassword, user.passwordHash)
+    if (!valid) throw new Error('Incorrect password')
+
+    const passwordHash = await bcrypt.hash(data.newPassword, 10)
+
+    await prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash }
+    })
+}
+
+export async function requestEmailUpdate(userId: string, newEmail: string) {
+    const existing = await prisma.user.findUnique({ where: { email: newEmail } })
+    if (existing) throw new Error('email already in use')
+
+        const token = crypto.randomBytes(32).toString('hex')
+        const expires = new Date((Date.now() + 1000 * 60 * 60))
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                pendingEmail: newEmail,
+                emailVerifyToken: token,
+                emailVerifyExpires: expires,
+            }
+        })
+
+        await sendEmailVerificationEmail(newEmail, token)
+}
+
+export async function verifyEmailUpdate(token: string) {
+    const user = await prisma.user.findFirst({
+        where: {
+            emailVerifyToken: token,
+            emailVerifyExpires: { gt: new Date() }
+        }
+    })
+    
+    if (!user) throw new Error('Invalid or expired token')
+    if (!user.pendingEmail) throw new Error('No pending email change')
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                email: user.pendingEmail,
+                pendingEmail: null,
+                emailVerifyToken: null,
+                emailVerifyExpires: null,
+            }
+        })
+}
 
 export async function login(input: LoginInput) {
     const { email, password } = input

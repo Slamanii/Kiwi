@@ -123,6 +123,10 @@ enum NotificationType {
   ESCROW_FUNDED
   DEAL_COMPLETED
   NEW_RESEEK
+  RATING_RECEIVED
+  APPLICATION_REJECTED
+  ACCOUNT_BANNED
+  REFERRAL_PAID
   SYSTEM
 }
 
@@ -164,26 +168,30 @@ enum CommunityMessagingMode {
 // ─── MODELS ──────────────────────────────────────────────
 
 model User {
-  id                 String             @id @default(cuid())
-  email              String             @unique
-  phone              String?            @unique
-  passwordHash       String
-  name               String
-  roles              UserRole[]
-  comments           SeekComment[]
-  verificationStatus VerificationStatus @default(UNVERIFIED)
-  subscriptionTier   SubscriptionTier   @default(FREE)
-  referralCode    String?  @unique
-  referredBy      String?
-  referralCount   Int      @default(0)
+  id                    String             @id @default(cuid())
+  email                 String             @unique
+  phone                 String?            @unique
+  passwordHash          String
+  name                  String
+  roles                 UserRole[]
+  comments              SeekComment[]
+  verificationStatus    VerificationStatus @default(UNVERIFIED)
+  subscriptionTier      SubscriptionTier   @default(FREE)
+  referralCode          String?  @unique
+  referredBy            String?
+  referralCount         Int      @default(0)
   accountNumber         String?
   bankCode              String?
   accountName           String?
   paystackRecipientCode String?
-  resetToken      String?
-  resetTokenExpiry DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  resetToken            String?
+  resetTokenExpiry      DateTime?
+  pendingEmail          String?
+  emailVerifyToken      String?
+  emailVerifyExpires    DateTime?
+  systemReview          SystemReview[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   profile                Profile?
   agentApplication       AgentApplication?
@@ -203,6 +211,8 @@ model User {
   communitiesCreated     Community[]
   communities            CommunityMember[]
   communityMessages      CommunityMessage[]
+  ReviewsGiven           Review[]           @relation("ReviewsGiven")
+  reveiewsReceived       Review[]           @relation("ReviewsReceived")
   deviceTokens           DeviceToken[]
 }
 
@@ -219,7 +229,7 @@ model Profile {
   requests     Int @default(0)
   ongoing      Int @default(0)
   completedDeals Int    @default(0)
-  rating       Float?    @default(0)
+  rating       Float?    @default(3.5)
   reviewCount  Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -242,6 +252,7 @@ model AgentApplication {
   accountNumber         String
   bankCode              String
   accountName           String
+  rejectionReason   String
   reviewedAt    DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -349,9 +360,11 @@ model Thread {
   seekId    String
   clientId  String
   agentId   String
+  review    Review?
   status    ThreadStatus @default(ACTIVE)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+  closedAt  DateTime?
 
   seek      Seek       @relation(fields: [seekId], references: [id], onDelete: Cascade)
   client    User       @relation("ClientThreads", fields: [clientId], references: [id])
@@ -555,4 +568,28 @@ model DeviceToken {
   createdAt   DateTime  @default(now()) 
 
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade) 
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  reviewerId String
+  agentId    String
+  threadId   String   @unique
+  score      Float
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  reviewer User   @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  agent    User   @relation("ReviewsReceived", fields: [agentId], references: [id])
+  thread   Thread @relation(fields: [threadId], references: [id])
+}
+
+model SystemReview {
+  id        String   @id @default(cuid())
+  userId    String
+  score     Float
+  comment   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -21,6 +21,8 @@ const pushMessages: Record<NotificationType, { title: string }> = {
     [NotificationType.ESCROW_FUNDED]: { title: 'Escrow funded - begin work' },
     [NotificationType.DEAL_COMPLETED]: { title: 'Deal compleyte' },
     [NotificationType.NEW_RESEEK]: { title: 'Your Seek was reshared' },
+    [NotificationType.RATING_RECEIVED]: { title: 'Rating just in' },
+    [NotificationType.APPLICATION_REJECTED]: { title: 'rejected'},
     [NotificationType.SYSTEM]: { title: 'Kiwi' },
 }
 
@@ -51,4 +53,38 @@ export async function notify(input: NotifyInput) {
         }
     })
     return notification
+}
+
+
+export async function getNotifications(userId: string, cursor?: string, limit = 20) {
+    const notifications = await prisma.notification.findMany({
+        take: limit + 1,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+    })
+
+    const hasMore = notifications.length > limit
+    if (hasMore) notifications.pop()
+
+    return {
+        notifications: notifications.map(n => ({
+            ...n,
+            title: pushMessages[n.type]?.title ?? 'Kiwi'
+        })),
+        nextCursor: hasMore ? notifications[notifications.length - 1].id : null
+    }
+}
+
+export async function markNotificationRead(notificationId: string, userId: string) {
+    const notification = await prisma.notification.findUnique({
+        where: { id: notificationId }
+    })
+    if (!notification) throw new Error('Notification not found')
+    if (notification.userId !== userId) throw new Error('Unauthorized')
+
+    return prisma.notification.update({
+        where: { id: notificationId },
+        data: { read: true }
+    })
 }

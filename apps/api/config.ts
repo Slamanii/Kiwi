@@ -13,7 +13,13 @@ const schema = z.object({
     SMTP_PORT: z.string().default('587'),
     SMTP_USER: z.string(),
     SMTP_PASS: z.string(),
-    APP_URL: z.string()
+    APP_URL: z.string(),
+    FIREBASE_PROJECT_ID: z.string(),
+    FIREBASE_CLIENT_EMAIL: z.string(),
+    FIREBASE_PRIVATE_KEY: z.string(),
+    PAYSTACK_SECRET_KEY: z.string(),
+    REFRESH_TOKEN_SECRET: z.string(),
+    REFERRAL_PAYOUT_AMOUNT: z.string(),
 })
 
 const parsed = schema.safeParse(process.env)
