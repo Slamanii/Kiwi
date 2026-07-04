@@ -18,9 +18,9 @@
     "zod": "^3"
   },
   "devDependencies": {
+    "@kiwi/tsconfig": "*",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5",
-    "@kiwi/tsconfig": "*"
+    "typescript": "^5"
   }
 }

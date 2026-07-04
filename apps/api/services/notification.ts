@@ -6,7 +6,7 @@ import { sendPushToUser } from '../utils/fcm.js'
 interface NotifyInput {
     userId: string
     type: NotificationType
-    title: string
+    title?: string
     body: string
     metadata?: Record<string, any>
 }
@@ -23,6 +23,8 @@ const pushMessages: Record<NotificationType, { title: string }> = {
     [NotificationType.NEW_RESEEK]: { title: 'Your Seek was reshared' },
     [NotificationType.RATING_RECEIVED]: { title: 'Rating just in' },
     [NotificationType.APPLICATION_REJECTED]: { title: 'rejected'},
+    [NotificationType.REFERRAL_PAID]: { title: 'Referral payout'},
+    [NotificationType.ACCOUNT_BANNED]: { title: 'Ban'},
     [NotificationType.SYSTEM]: { title: 'Kiwi' },
 }
 

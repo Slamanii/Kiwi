@@ -163,6 +163,14 @@ enum CommunityMessagingMode {
   SELECTED_MEMBERS
 }
 
+enum TrendingCategory {
+  PROPERTY_TYPE
+  LOCATION
+  URGENCY
+  ROOMS
+  INFO
+}
+
 
 
 // ─── MODELS ──────────────────────────────────────────────
@@ -175,6 +183,7 @@ model User {
   name                  String
   roles                 UserRole[]
   comments              SeekComment[]
+  commentLikes          CommentLike[]
   verificationStatus    VerificationStatus @default(UNVERIFIED)
   subscriptionTier      SubscriptionTier   @default(FREE)
   referralCode          String?  @unique
@@ -189,6 +198,7 @@ model User {
   pendingEmail          String?
   emailVerifyToken      String?
   emailVerifyExpires    DateTime?
+  isBanned              Boolean           @default(false)
   systemReview          SystemReview[]
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
@@ -202,8 +212,8 @@ model User {
   messagesSent           Message[]
   notifications          Notification[]
   transactions           Transaction[]
-  referralsMade   Referral[]  @relation("ReferralsMade")
-  referralReceived Referral?  @relation("ReferredBy")
+  referralsMade          Referral[]  @relation("ReferralsMade")
+  referralReceived       Referral?  @relation("ReferredBy")
   reportsSubmitted       Report[]           @relation("ReportSubmitter")
   reportsReceived        Report[]           @relation("ReportTarget")
   directMessagesSent     DirectMessage[]    @relation("DMSender")
@@ -264,6 +274,8 @@ model Seek {
   id           String        @id @default(cuid())
   isReseek     Boolean       @default(false)
   originalSeekId String?
+  originalSeek  Seek?        @relation("ReseekOriginal", fields: [originalSeekId], references: [id])
+  reseeksOf     Seek[]       @relation("ReseekOriginal")
   authorId     String
   content      String
   type         SeekType      @default(LOOKING_TO_RENT)
@@ -282,6 +294,7 @@ model Seek {
   likeCount    Int           @default(0)
   reseekCount  Int           @default(0)
   bidCount     Int           @default(0)
+  trendingEntries  TrendingSeek[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   expiresAt    DateTime?
@@ -299,11 +312,27 @@ model SeekComment {
   seekId    String
   userId    String
   content   String
+  parentId  String
+  likeCount Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   seek      Seek     @relation(fields: [seekId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    SeekComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   SeekComment[] @relation("CommentReplies")
+  likes     CommentLike[]
+}
+
+model CommentLike {
+  id        String @id @default(cuid())
+  commentId String
+  userId    String
+
+  comment SeekComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
 }
 
 model SeekLike {
@@ -592,4 +621,28 @@ model SystemReview {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Trending {
+  id           String           @id @default(cuid())
+  category     TrendingCategory
+  headline     String
+  count        Int
+  location     String?
+  propertyType PropertyType?
+  urgency      String?
+  rooms        Int?
+  seeks        TrendingSeek[]
+  computedAt   DateTime         @default(now())
+}
+
+model TrendingSeek {
+  id         String @id @default(cuid())
+  trendingId String
+  seekId     String
+
+  trending Trending @relation(fields: [trendingId], references: [id], onDelete: Cascade)
+  seek     Seek     @relation(fields: [seekId], references: [id], onDelete: Cascade)
+
+  @@unique([trendingId, seekId])
 }

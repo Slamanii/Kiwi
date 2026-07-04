@@ -13,9 +13,9 @@ export function createSocketServer(app: express.Application) {
 
     io.on('connection', (socket) => {
         console.log('client connected:', socket.id)
-    
 
-        socket.on('join:thread', (seekId: string) => {
+        // joins
+        socket.on('join:seek', (seekId: string) => {
             socket.join(`seek:${seekId}`)
         })
 
@@ -27,20 +27,49 @@ export function createSocketServer(app: express.Application) {
             socket.join(`user:${userId}`)
         })
 
-        ///for disconnections
+        socket.on('join:dm', (conversationId: string) => {
+            socket.join(`dm:${conversationId}`)
+        })
+
+        socket.on('join:community', (communityId: string) => {
+            socket.join(`community:${communityId}`)
+        })
+
+        socket.on('join:profile', (userId: string) => {
+            socket.join(`profile:${userId}`)
+        })
+
+        // leaves
         socket.on('leave:seek', (seekId: string) => {
-         socket.leave(`seek:${seekId}`)
+            socket.leave(`seek:${seekId}`)
         })
 
         socket.on('leave:thread', (threadId: string) => {
-         socket.leave(`thread:${threadId}`)
-            })
+            socket.leave(`thread:${threadId}`)
+        })
+
+        socket.on('leave:user', (userId: string) => {
+            socket.leave(`user:${userId}`)
+        })
+
+        socket.on('leave:dm', (conversationId: string) => {
+            socket.leave(`dm:${conversationId}`)
+        })
+
+        socket.on('leave:community', (communityId: string) => {
+            socket.leave(`community:${communityId}`)
+        })
+
+        socket.on('leave:profile', (userId: string) => {
+            socket.leave(`profile:${userId}`)
+        })
+
         socket.on('disconnect', () => {
             console.log('client disconnected:', socket.id)
         })
-
-        return httpServer
     })
+
+    return httpServer
 }
 
 export function getIO() {

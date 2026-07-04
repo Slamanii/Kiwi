@@ -1,6 +1,9 @@
 import { prisma } from '@kiwi/db'
-import { AgreementStatus, AgreementStage, ThreadStatus } from '@kiwi/types'
+import { AgreementStatus, AgreementStage, ThreadStatus, SeekStatus, NotificationType } from '@kiwi/types'
 import type { CreateAgreementInput } from '@kiwi/types'
+import { getIO } from '../utils/socket.js'
+import { notify } from './notification.js'
+
 
 
 
@@ -163,5 +166,40 @@ export async function completeAgreement(agreementId: string, clientId: string) {
         where: { id: agreement.threadId },
         data: { status: ThreadStatus.CLOSED }
     })
+
+    await tx.seek.update({
+        where: { id: agreement.thread.seekId },
+        data: { status: SeekStatus.DEPRECATED }
     })
+  })
+
+  const clientProfile = await prisma.profile.findUnique({
+        where: { userId: agreement.thread.clientId }
+    })
+    getIO().to(`profile:${agreement.thread.clientId}`).emit('profile:statsUpdated', {
+        userId: agreement.thread.clientId,
+        requests: clientProfile?.requests,
+        ongoing: clientProfile?.ongoing,
+        completedDeals: clientProfile?.completedDeals,
+    })
+
+    getIO().to(`thread:${agreement.threadId}`).emit('thread:completed', {
+        threadId: agreement.threadId,
+        agreementId,
+    })
+
+    await notify({
+        userId: agreement.thread.agentId,
+        type: NotificationType.AGREEMENT_SIGNED,
+        body: 'Your agreement has been completed',
+        metadata: { agreementId, threadId: agreement.threadId }
+    })
+
+    await notify({
+        userId: agreement.thread.clientId,
+        type: NotificationType.AGREEMENT_SIGNED,
+        body: 'Your agreement has been completed',
+        metadata: { agreementId, threadId: agreement.threadId }
+    })
+
 }

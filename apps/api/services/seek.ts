@@ -15,8 +15,8 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
                 where: { id: userId },
                 select: { roles: true }
             })
-            const allowed = [UserRole.AGENT, UserRole.LAWYER, UserRole.DEVELOPER]
-            const hasRole = user?.roles.some((r) => allowed.includes(r as typeof UserRole.AGENT | typeof UserRole.LAWYER | typeof UserRole.DEVELOPER))
+        const allowed: UserRole[] = [UserRole.AGENT, UserRole.LAWYER, UserRole.DEVELOPER]            
+        const hasRole = user?.roles.some((r: UserRole) => allowed.includes(r))
             if (!hasRole) throw new Error('Only agents, lawyers and developers can post info')
         }
 
@@ -75,15 +75,28 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
         author: seek.author
     })
 
+     if (seek.type !== SeekType.INFO) {
+        const profile = await prisma.profile.findUnique({ where: { userId } })
+        getIO().to(`profile:${userId}`).emit('profile:statsUpdated', {
+            userId,
+            requests: profile?.requests,
+            ongoing: profile?.ongoing,
+            completedDeals: profile?.completedDeals,
+        })
+    }
+
     return seek
 }
 
 export async function createReseek(userId: string, seekId: string, content: string) {
     const originalSeek = await prisma.seek.findUnique({  where: { id: seekId } })
     if (!originalSeek) throw new Error('Seek not found')
+    if (originalSeek.type === SeekType.INFO) throw new Error('Cannot reseek an info post')
+
+        const rootSeekId = originalSeek.isReseek ? originalSeek.originalSeekId! : seekId
 
         const existing = await prisma.seekReseek.findUnique({
-            where: { seekId_userId: { seekId, userId }}
+            where: { seekId_userId: { seekId: rootSeekId, userId }}
         })
         if (existing) throw new Error('Already reseeked')
 
@@ -97,6 +110,8 @@ export async function createReseek(userId: string, seekId: string, content: stri
                     location: originalSeek.location,
                     urgency: originalSeek.urgency,
                     rooms: originalSeek.rooms,
+                    isSingle: originalSeek.isSingle,
+                    hasPets: originalSeek.hasPets,
                     isReseek: true,
                     originalSeekId: seekId,
                 },
@@ -142,6 +157,13 @@ export async function createReseek(userId: string, seekId: string, content: stri
         urgency: reseek.urgency,
         author: reseek.author
     })
+        const profile = await prisma.profile.findUnique({ where: { userId } })
+            getIO().to(`profile:${userId}`).emit('profile:statsUpdated', {
+                userId,
+                requests: profile?.requests,
+                ongoing: profile?.ongoing,
+                completedDeals: profile?.completedDeals,
+    })
 
             return reseek
 }
@@ -186,9 +208,20 @@ const where: Prisma.SeekWhereInput = {
               avatarUrl: true,
               location: true,
               rating: true,
-            }
+            },
           }
         }
+      },
+      originalSeek: {
+            include:{
+                author: {
+                    select: {
+                        id: true,
+                        name: true,
+                        profile: { select: { avatarUrl: true } }
+                    }
+                }
+            }
       },
       _count: {
         select: {
@@ -261,14 +294,24 @@ export async function deleteSeek(seekId: string, userId: string) {
 }
 
 
-export async function addComment(seekId: string, userId: string, content: string) {
+export async function addComment(seekId: string, userId: string, content: string, parentId?: string) {
+
+    if (parentId) {
+        const parent = await prisma.seekComment.findUnique({
+            where: { id: parentId }
+        })
+        if (!parent) throw new Error("Parent comment not found")
+        if (parent.seekId !== seekId) throw new Error("Comment does not belong to this seek")
+        if (parent.parentId) throw new Error('Cannot reply to a reply')
+    }
+
     const seek = await prisma.seek.findUnique({ where: { id: seekId }})
     if (!seek) throw new Error('Seek not found')
         if (!seek.commentsEnabled) throw new Error('Comments are disabled on this seek')
 
             const comment = await prisma.$transaction(async (tx: any) => {
                 const created = await tx.seekComment.create({
-                    data: { seekId, userId, content },
+                    data: { seekId, userId, content, parentId: parentId ?? null },
                     include: {
                         user: {
                             select: {
@@ -283,12 +326,18 @@ export async function addComment(seekId: string, userId: string, content: string
                         }
                     }
                 })
+
+                if (!parentId) { 
                 await tx.seek.update({
                     where: { id: seekId },
                     data: { commentCount: { increment: 1 } }
                 })
+            }
                 return created
             })
+
+            getIO().to(`seek:${seekId}`).emit('seek:comment', { seekId, comment })
+
                 return comment
 }
 
@@ -298,7 +347,7 @@ export async function getComments(seekId: string) {
     if (!seek) throw new Error('Seek not found')
 
         return prisma.seekComment.findMany({
-            where: { seekId },
+            where: { seekId, parentId: null },
             orderBy: {  createdAt: 'desc' },
             include: {
                 user: {
@@ -308,11 +357,53 @@ export async function getComments(seekId: string) {
                         profile: {
                             select: { avatarUrl: true }
                         }
+                    },
+                    replies: {
+                        orderBy: { createdAt: 'asc' },
+                        include: {
+                            author: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    profile: { select: { avatarUrl: true } }
+                                }
+                            }
+                        }
                     }
                 }
             }
         })
 }
+
+
+export async function likeComment(commentId: string, userId: string) {
+    const existing = await prisma.commentLike.findUnique({
+        where: { commentId_userId: { commentId, userId } }
+    })
+
+    if (existing) {
+        await prisma.$transaction([
+            prisma.commentLike.delete({
+                where: { commentId_userId: { commentId, userId } }
+            }),
+            prisma.seekComment.update({
+                where: { id: commentId },
+                data: { likeCount: { decrement: 1 } }
+            })
+        ])
+        return { liked: false }
+    }
+
+    await prisma.$transaction([
+        prisma.commentLike.create({ data: { commentId, userId } }),
+        prisma.seekComment.update({
+            where: { id: commentId },
+            data: { likeCount: { increment: 1 } }
+        })
+    ])
+    return { liked: true }
+}
+
 
 export async function deleteComment(commentId: string, userId: string) {
     const comment = await prisma.seekComment.findUnique({ where: { id: commentId } })
@@ -326,6 +417,9 @@ export async function deleteComment(commentId: string, userId: string) {
                 data: { commentCount: { decrement: 1 }}
             })
         ])
+
+        getIO().to(`seek:${comment.seekId}`).emit('seek:commentDeleted', { seekId: comment.seekId, commentId })
+
 }
 
 export async function toggleComments(seekId: string, userId: string) {
@@ -338,6 +432,8 @@ export async function toggleComments(seekId: string, userId: string) {
                 where: { id: seekId },
                 data: { commentsEnabled: !seek.commentsEnabled }
             })
+
+            
 }
 
 export async function likeSeek(userId: string, seekId: string) {

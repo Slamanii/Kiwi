@@ -2,6 +2,8 @@ import { prisma } from '@kiwi/db'
 import { UserRole, UpdateProfileInput, BankDetailsInput, VerificationStatus, NotificationType, AgreementStatus } from '@kiwi/types'
 import { verifyAccountWithPaystack, createPaystackRecipient } from './paystack.js'
 import  { notify } from './notification.js'
+import { getIO } from '../utils/socket.js'
+
 
 export type AgentProfileFilters = {
     location?: string
@@ -80,6 +82,9 @@ export async function updateProfile(userId: string, data: UpdateProfileInput) {
                 }
             })
         ])
+
+    
+
 
         return updatedProfile
 }
@@ -185,7 +190,7 @@ export async function submitRating(
     })
     if (!thread) throw new Error('Thread not found')
     if (thread.clientId !== reviewerId) throw new Error('Only the client can submit a rating')
-    if (![AgreementStatus.COMPLETED, AgreementStatus.DISPUTED].includes(thread.status)) {
+    if (!thread.agreement || ![AgreementStatus.COMPLETED, AgreementStatus.DISPUTED].includes(thread.agreement.status as 'COMPLETED' | 'DISPUTED')) {
         throw new Error('Thread must be completed or disputed before submitting a rating')
     }
 
@@ -215,6 +220,12 @@ export async function submitRating(
                 rating: _avg.score ?? 3.5,
                 reviewCount: _count.score
             }
+        })
+
+        getIO().to(`profile:${agentId}`).emit('profile:ratingUpdated', {
+            userId: agentId,
+            rating: _avg.score ?? 3.5,
+            reviewCount: _count.score,
         })
 
         return created
