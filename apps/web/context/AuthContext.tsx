@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [])
     const login = async (accessToken: string, refreshToken: string) => {
     // cookies for middleware route protection
-    document.cookie = `accessToken=${accessToken}; path=/; max-age=${60 * 15}`
+    document.cookie = `accessToken=${accessToken}; path=/; max-age=${60 * 60 * 24 * 30}`
     document.cookie = `refreshToken=${refreshToken}; path=/; max-age=${60 * 60 * 24 * 30}`
     // localStorage for AuthContext hydration on refresh
     localStorage.setItem('accessToken', accessToken)

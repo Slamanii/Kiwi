@@ -36,7 +36,7 @@ api.interceptors.response.use(
                 const data = await refreshPromise
                 localStorage.setItem('accessToken', data.accessToken)
                 localStorage.setItem('refreshToken', data.refreshToken)
-                document.cookie = `accessToken=${data.accessToken}; path=/; max-age=${60 * 15}`
+                document.cookie = `accessToken=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 30}`
                 document.cookie = `refreshToken=${data.refreshToken}; path=/; max-age=${60 * 60 * 24 * 30}`
                 original.headers.authorization = `Bearer ${data.accessToken}`
                 return api(original)
