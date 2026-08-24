@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@kiwi/types": "*",
-    "@kiwi/ui": "*",
+    "@kiwi/types": "workspace:*",
+    "@kiwi/ui": "workspace:*",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19",
@@ -18,7 +18,7 @@
     "zod": "^3"
   },
   "devDependencies": {
-    "@kiwi/tsconfig": "*",
+    "@kiwi/tsconfig": "workspace:*",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.5.4",

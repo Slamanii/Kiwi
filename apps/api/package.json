@@ -9,8 +9,8 @@
     "bootstrap-admin": "tsx --env-file=../../.env scripts/bootstrapAdmin.ts"
   },
   "dependencies": {
-    "@kiwi/db": "*",
-    "@kiwi/types": "*",
+    "@kiwi/db": "workspace:*",
+    "@kiwi/types": "workspace:*",
     "cors": "^2",
     "dotenv": "^16",
     "express": "^4",
