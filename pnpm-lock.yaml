@@ -78,6 +78,9 @@ importers:
       '@kiwi/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@prisma/client':
+        specifier: ^5.22.0
+        version: 5.22.0(prisma@5.22.0)
       cors:
         specifier: ^2
         version: 2.8.6
