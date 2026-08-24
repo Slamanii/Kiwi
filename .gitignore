@@ -3,6 +3,7 @@ dist/
 build/
 .next/
 .env
+.env.local
 .DS_Store
 kiwi-bbab9-firebase-adminsdk-fbsvc-1bd1b32a90.json
 kiwi-bbab9-firebase-adminsdk-fbsvc-1bd1b32a90.json
