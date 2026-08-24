@@ -4,13 +4,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useScrollDirection } from '@/hooks/useScrollDirection'
 import { useAuth } from '@/context/AuthContext'
 import { useState } from 'react'
+import { HomeIcon, ExploreIcon, ChatIcon, ProfileIcon } from '@/components/ui/Icons'
 
 
 const TABS = [
-    { href: '/feed', label: 'Home', icon: '🏠' },
-    { href: '/explore', label: 'Explore', icon: '🔎' },
-    { href: '/chat', label: 'Chat', icon: '💬' },
-    { href: '/profile', label: 'Profile', icon: '👤' },
+    { href: '/feed', label: 'Home', Icon: HomeIcon },
+    { href: '/explore', label: 'Explore', Icon: ExploreIcon },
+    { href: '/chat', label: 'Chat', Icon: ChatIcon },
+    { href: '/profile', label: 'Profile', Icon: ProfileIcon },
 ]
 
 const OPTIONS = [
@@ -82,8 +83,8 @@ function getArcPositions(count: number) {
                     <div className={`
                             fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50
                             w-[70%]
-                            transition-transform duration-300
-                            ${hidden && !open ? 'translate-y-[120%]' : 'translate-y-0'}
+                            transition-opacity duration-300
+                            ${hidden && !open ? 'opacity-0 pointer-events-none' : 'opacity-100'}
                         `}>
                         <nav className="h-11 bg-[#38353B] backdrop-blur-xl
                                 border border-white/20 shadow-lg rounded-3xl
@@ -97,7 +98,7 @@ function getArcPositions(count: number) {
                                         className={`flex-1 min-w-0 h-full flex flex-col items-center justify-center gap-0 rounded-2xl transition-colors
                                             ${active ? 'text-blue-500' : 'text-gray-400'}`}
                                     >
-                                        <span className="text-base leading-none">{tab.icon}</span>
+                                        <tab.Icon className="w-[18px] h-[18px]" filled={active} />
                                         <span className={`h-0.5 w-[35%] rounded-full transition-colors duration-300 my-0.5
                                             ${active ? 'bg-blue-500' : 'bg-transparent'}`} />
                                         <span className="text-[9px] leading-none font-medium truncate max-w-full">{tab.label}</span>
