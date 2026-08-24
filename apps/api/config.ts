@@ -20,6 +20,7 @@ const schema = z.object({
     PAYSTACK_SECRET_KEY: z.string(),
     REFRESH_TOKEN_SECRET: z.string(),
     REFERRAL_PAYOUT_AMOUNT: z.string(),
+    GOOGLE_MAPS_API_KEY: z.string().optional(),
 })
 
 const parsed = schema.safeParse(process.env)

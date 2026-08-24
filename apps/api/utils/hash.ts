@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt'
 
-const SALT_ROUNDS = 12;
+export const SALT_ROUNDS = 12;
 
-export  function hashPassword(password: string): Promise<String> {
+export  function hashPassword(password: string): Promise<string> {
 
     const hash =   bcrypt.hash(password, SALT_ROUNDS);
 

@@ -7,14 +7,14 @@ const router = Router()
 router.post('/reviews', requireAuth, async (req, res) => {
     try {
         const { score, comment } = req.body
-        const result = await submitSystemReview(req.user!.id, { score, comment })
+        const result = await submitSystemReview(req.user!.userId, { score, comment })
         res.json(result)
     } catch (err: any) {
         res.status(400).json({ error: err.message })
     }
 })
 
-router.get('/reviews', requireAuth, requireRole(['DEVELOPER']), async (req, res) => {
+router.get('/reviews', requireAuth, requireRole(['ADMIN']), async (req, res) => {
     try {
         const { cursor, limit } = req.query
         const result = await getSystemReviews(

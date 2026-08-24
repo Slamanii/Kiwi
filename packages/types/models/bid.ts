@@ -3,7 +3,11 @@ export interface Bid {
   seekId: string
   agentId: string
   rate: number
+  amount: number
+  currency?: string
   message: string
+  images: string[]
+  videoUrl?: string
   createdAt: Date
 }
 
@@ -18,5 +22,9 @@ export type BidStatus = (typeof BidStatus)[keyof typeof BidStatus]
 export interface CreateBidInput {
     seekId: string,
     rate: number,
+    amount: number,
+    currency?: string,
     message: string,
-} 
+    images?: string[],
+    videoUrl?: string,
+}

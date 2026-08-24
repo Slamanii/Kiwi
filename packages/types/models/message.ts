@@ -14,7 +14,8 @@ export interface SendMessageInput {
   mediaUrl?: string
   mediaSize?: number
   mediaDuration?: number
-  fileName?: string 
+  fileName?: string
+  replyToId?: string
 }
 
 export interface CreateCommunityInput {
@@ -22,4 +23,7 @@ export interface CreateCommunityInput {
   description?: string
   avatarUrl?: string
   isPrivate?: boolean
+  type?: 'STANDARD' | 'MARKETPLACE'
+  category?: 'NEIGHBORHOOD' | 'REAL_ESTATE' | 'INTERIOR_DESIGN' | 'PROPERTY_INVESTMENT' | 'AGENTS_PROFESSIONALS' | 'STUDENT_HOUSING' | 'HOME_SERVICES' | 'GENERAL'
+  requireApproval?: boolean
 }

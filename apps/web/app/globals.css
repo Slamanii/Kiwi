@@ -6,10 +6,26 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+/* iOS/Android auto-zoom on focus only fires when a form control's
+   computed font-size is below 16px. !important is needed since Tailwind's
+   text-sm/text-xs utilities otherwise outrank this element selector.
+   Kept separate from the viewport meta so pinch-zoom still works. */
+input,
+textarea,
+select {
+    font-size: 16px !important;
+}
+
+html {
+    background-color: #1C1B1A;
+}
+
 body {
     max-width: 480px;
     margin: 0 auto;
     overflow-x: hidden;
+    background-color: #1C1B1A;
+    position: relative;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -20,8 +36,16 @@ body {
     scrollbar-width: none;
 }
 .chat-bg-pattern {
-    background-color: #e8f4f0;
-    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 5 L35 18 L35 35 L25 35 L25 25 L15 25 L15 35 L5 35 L5 18 Z' fill='%2300a86b' fill-opacity='0.06'/%3E%3C/svg%3E");
+    background-color: #000000;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
     background-repeat: repeat;
-    background-size: 40px 40px;
+    background-size: 28px 28px;
 }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.2s ease forwards; }

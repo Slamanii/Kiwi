@@ -5,6 +5,7 @@ import {
   createBid,
   getBidsBySeek,
   getMyBids,
+  getReceivedBids,
   getBidById,
   updateBidStatus,
   selectBid,
@@ -17,7 +18,11 @@ const router = Router()
 const createBidSchema = z.object({
   seekId: z.string(),
   rate: z.number().positive(),
+  amount: z.number().positive(),
+  currency: z.string().optional(),
   message: z.string().min(10),
+  images: z.array(z.string()).max(6).optional(),
+  videoUrl: z.string().optional(),
 })
 
 const updateStatusSchema = z.object({
@@ -56,6 +61,17 @@ router.get('/mine', requireAuth, async (req: Request, res: Response) => {
   try {
     const agentId = req.user?.userId as string
     const bids = await getMyBids(agentId)
+    return res.status(200).json(bids)
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+// get bids received on my seeks — client only (empty for agents with no seeks)
+router.get('/received', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId as string
+    const bids = await getReceivedBids(userId)
     return res.status(200).json(bids)
   } catch (err: any) {
     return res.status(400).json({ error: err.message })

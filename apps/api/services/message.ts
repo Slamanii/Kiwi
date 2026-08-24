@@ -1,7 +1,8 @@
 import { prisma } from '@kiwi/db'
-import { MessageType, NotificationType, SendMessageInput, CreateCommunityInput, CommunityRole, CommunityMessagingMode } from '@kiwi/types'
+import { MessageType, NotificationType, SendMessageInput, CommunityRole, CommunityMessagingMode } from '@kiwi/types'
 import { getIO } from '../utils/socket.js'
 import { notify } from './notification.js'
+import { isBlocked } from './conversation.js'
 
 export async function sendMessage(
     threadId: string,
@@ -14,19 +15,28 @@ export async function sendMessage(
             id: true,
             clientId: true,
             agentId: true,
+            clientAccepted: true, 
+            agentAccepted: true,
             status: true,
         }
     })
 
     if (!thread) throw new Error('thread not found')
+    if (thread.clientId !== senderId && thread.agentId !== senderId) throw new Error('Unauthorized')
     if (thread.status === 'CLOSED' || thread.status === 'ARCHIVED') {
         throw new Error('Thread is no longer active')
+    }
+    if (!thread.clientAccepted || !thread.agentAccepted) {
+        throw new Error('Both parties must accept compliance terms before messaging')
     }
 
     const isParticipant = thread.clientId === senderId || thread.agentId === senderId
         if (!isParticipant) throw new Error('unauthorized')
 
-            const message = await prisma.message.create({ 
+            const otherPartyId = senderId === thread.clientId ? thread.agentId : thread.clientId
+            if (await isBlocked(senderId, otherPartyId)) throw new Error('Unable to send message')
+
+            const message = await prisma.message.create({
                 data: {
                     threadId,
                     senderId,
@@ -36,6 +46,7 @@ export async function sendMessage(
                     mediaSize: data.mediaSize ?? null,
                     mediaDuration: data.mediaDuration ?? null,
                     fileName: data.fileName ?? null,
+                    replyToId: data.replyToId ?? null,
                 },
                 include: {
                     sender: {
@@ -44,7 +55,8 @@ export async function sendMessage(
                             name: true,
                             profile: { select: { avatarUrl: true } }
                         }
-                    }
+                    },
+                    replyTo: { include: { sender: { select: { id: true, name: true } } } }
                 }
         })
 
@@ -75,6 +87,8 @@ export async function sendDM(
 
   const receiver = await prisma.user.findUnique({ where: { id: receiverId } })
   if (!receiver) throw new Error('User not found')
+
+  if (await isBlocked(senderId, receiverId)) throw new Error('Unable to send message')
 
   // create conversation if first message between these two users
   const conversation = await prisma.dMConversation.upsert({
@@ -107,6 +121,7 @@ export async function sendDM(
       mediaSize: data.mediaSize ?? null,
       mediaDuration: data.mediaDuration ?? null,
       fileName: data.fileName ?? null,
+      replyToId: data.replyToId ?? null,
     },
     include: {
       sender: {
@@ -115,14 +130,14 @@ export async function sendDM(
           name: true,
           profile: { select: { avatarUrl: true } }
         }
-      }
+      },
+      replyTo: { include: { sender: { select: { id: true, name: true } } } }
     }
   })
 
   // emit to DM conversation room
   getIO().to(`dm:${conversation.id}`).emit('message:new', message)
 
-  // notify receiver
   await notify({
     userId: receiverId,
     type: NotificationType.NEW_MESSAGE,
@@ -147,11 +162,166 @@ export async function markMessagesRead(threadId: string, userId: string) {
                     threadId,
                     senderId: { not: userId },
                 },
-                data: { }
+                data: { read: true }
             })
 
             const senderId = userId === thread.clientId ? thread.agentId : thread.clientId
             getIO().to(`user:${senderId}`).emit('messages:read', { threadId })
+}
+
+export async function getThreadMessages(threadId: string, userId: string, cursor?: string, limit = 30) {
+    const thread = await prisma.thread.findUnique({ where: { id: threadId } })
+    if (!thread) throw new Error('Thread not found')
+
+    const isParticipant = thread.clientId === userId || thread.agentId === userId
+    if (!isParticipant) throw new Error('Unauthorized')
+
+    const messages = await prisma.message.findMany({
+        where: { threadId, archived: false },
+        take: limit + 1,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { createdAt: 'desc' },
+        include: {
+            sender: {
+                select: {
+                    id: true,
+                    name: true,
+                    profile: { select: { avatarUrl: true } }
+                }
+            },
+            replyTo: { include: { sender: { select: { id: true, name: true } } } }
+        }
+    })
+
+    const hasMore = messages.length > limit
+    if (hasMore) messages.pop()
+
+    return {
+        messages,
+        nextCursor: hasMore ? messages[messages.length - 1].id : null
+    }
+}
+
+export async function getDMMessages(userId: string, otherUserId: string, cursor?: string, limit = 30) {
+    const conversation = await prisma.dMConversation.findUnique({
+        where: {
+            participantA_participantB: {
+                participantA: userId < otherUserId ? userId : otherUserId,
+                participantB: userId < otherUserId ? otherUserId : userId,
+            }
+        }
+    })
+
+    if (!conversation) {
+        return { conversationId: null, messages: [], nextCursor: null }
+    }
+
+    const messages = await prisma.directMessage.findMany({
+        where: { conversationId: conversation.id, archived: false },
+        take: limit + 1,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { createdAt: 'desc' },
+        include: {
+            sender: {
+                select: {
+                    id: true,
+                    name: true,
+                    profile: { select: { avatarUrl: true } }
+                }
+            },
+            replyTo: { include: { sender: { select: { id: true, name: true } } } }
+        }
+    })
+
+    const hasMore = messages.length > limit
+    if (hasMore) messages.pop()
+
+    return {
+        conversationId: conversation.id,
+        messages,
+        nextCursor: hasMore ? messages[messages.length - 1].id : null
+    }
+}
+
+export async function getDMConversations(userId: string) {
+    const conversations = await prisma.dMConversation.findMany({
+        where: { OR: [{ participantA: userId }, { participantB: userId }] },
+        orderBy: { lastMessageAt: 'desc' },
+    })
+
+    return Promise.all(conversations.map(async (conversation) => {
+        const otherUserId = conversation.participantA === userId
+            ? conversation.participantB
+            : conversation.participantA
+
+        const [otherUser, unreadCount] = await Promise.all([
+            prisma.user.findUnique({
+                where: { id: otherUserId },
+                select: { id: true, name: true, profile: { select: { avatarUrl: true } } }
+            }),
+            prisma.directMessage.count({
+                where: { conversationId: conversation.id, receiverId: userId, read: false }
+            })
+        ])
+
+        return {
+            id: conversation.id,
+            otherUser,
+            lastMessage: conversation.lastMessage,
+            lastMessageAt: conversation.lastMessageAt,
+            unreadCount,
+        }
+    }))
+}
+
+export async function markDMRead(conversationId: string, userId: string) {
+    const conversation = await prisma.dMConversation.findUnique({ where: { id: conversationId } })
+    if (!conversation) throw new Error('Conversation not found')
+
+    const isParticipant = conversation.participantA === userId || conversation.participantB === userId
+    if (!isParticipant) throw new Error('Unauthorized')
+
+    await prisma.directMessage.updateMany({
+        where: { conversationId, receiverId: userId, read: false },
+        data: { read: true }
+    })
+
+    const otherUserId = conversation.participantA === userId ? conversation.participantB : conversation.participantA
+    getIO().to(`user:${otherUserId}`).emit('messages:read', { conversationId })
+}
+
+export async function getCommunityMessages(communityId: string, userId: string, cursor?: string, limit = 30) {
+    const membership = await prisma.communityMember.findUnique({
+        where: { communityId_userId: { communityId, userId } }
+    })
+    if (!membership) throw new Error('You are not a member of this community')
+
+    const messages = await prisma.communityMessage.findMany({
+        where: { communityId, archived: false },
+        take: limit + 1,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { createdAt: 'desc' },
+        include: {
+            sender: {
+                select: {
+                    id: true,
+                    name: true,
+                    profile: { select: { avatarUrl: true } }
+                }
+            },
+            listing: { select: { id: true, title: true, description: true, price: true, currency: true, images: true } },
+            poll: { include: { options: { orderBy: { order: 'asc' } } } },
+            replyTo: { include: { sender: { select: { id: true, name: true } } } }
+        }
+    })
+
+    const hasMore = messages.length > limit
+    if (hasMore) messages.pop()
+
+    return {
+        messages,
+        nextCursor: hasMore ? messages[messages.length - 1].id : null
+    }
 }
 
 export async function getUnreadCount(userId: string) {
@@ -216,6 +386,7 @@ export async function sendCommunityMessage(
                 mediaSize: data.mediaSize ?? null,
                 mediaDuration: data.mediaDuration ?? null,
                 fileName: data.fileName ?? null,
+                replyToId: data.replyToId ?? null,
             },
             include: {
                 sender: {
@@ -224,7 +395,8 @@ export async function sendCommunityMessage(
                         name: true,
                         profile: { select: { avatarUrl: true } }
                     }
-                }
+                },
+                replyTo: { include: { sender: { select: { id: true, name: true } } } }
             }
         })
 
@@ -244,38 +416,7 @@ export async function sendCommunityMessage(
     return message
 }
 
-export async function createCommunity(
-    creatorId: string,
-    data: CreateCommunityInput
-) {
-    const community = await prisma.$transaction(async (tx: any) => {
-        const created = await tx.community.create({
-            data: {
-                name: data.name,
-                description: data.description ?? null,
-                avatarUrl: data.avatarUrl ?? null,
-                creatorId,
-                isPrivate: data.isPrivate ?? false,
-                memberCount: 1,
-                lastMessageAt: new Date(),
-            }
-        })
-        await tx.communityMember.create({
-            data: {
-                communityId: created.id,
-                userId: creatorId,
-                role: CommunityRole.ADMIN
-            }
-        })
 
-        return created
-
-    })
-
-    getIO().to(`user:${creatorId}`).emit('community:created', community)
-
-    return community
-}
 
 // toggle messaging mode
 export async function updateCommunityMessagingMode(

@@ -2,7 +2,8 @@ export const SeekType = {
   LOOKING_TO_RENT: 'LOOKING_TO_RENT',
   LOOKING_TO_BUY: 'LOOKING_TO_BUY',
   PROPERTY_FOR_RENT: 'PROPERTY_FOR_RENT',
-  PROPERTY_FOR_SALE: 'PROPERTY_FOR_SALE'
+  PROPERTY_FOR_SALE: 'PROPERTY_FOR_SALE',
+  INFO: 'INFO'
 } as const
 export type SeekType = (typeof SeekType)[keyof typeof SeekType]
 
@@ -10,7 +11,8 @@ export const SeekStatus = {
   OPEN: 'OPEN',
   SELECTING: 'SELECTING',
   CLOSED: 'CLOSED',
-  EXPIRED: 'EXPIRED'
+  EXPIRED: 'EXPIRED',
+  DEPRECATED: 'DEPRECATED'
 } as const
 export type SeekStatus = (typeof SeekStatus)[keyof typeof SeekStatus]
 

@@ -27,10 +27,11 @@ export interface BecomeAnAgentRequest {
   userId: string
   zone: string          
   rate: number           
-  policyNote: string   
-  idType: string  
+  policyNote: string
+  nin: string
+  idType: string
   idNumber: string
-  idDocumentUrl: string  
+  idDocumentUrl: string
   accountNumber: string
   bankCode: string
   accountName: string

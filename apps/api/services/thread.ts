@@ -1,8 +1,10 @@
 import { prisma } from '@kiwi/db'
-import { ThreadStatus, AgreementStatus, BidStatus } from '@kiwi/types'
+import { getIO } from '../utils/socket.js'
+import { ThreadStatus, AgreementStatus, BidStatus, NotificationType, SeekStatus } from '@kiwi/types'
+import { notify } from './notification.js'
 
 export async function getThreadsByUser(userId: string) {
-    return prisma.thread.findMany({
+    const threads = await prisma.thread.findMany({
         where: {
             OR: [
                 { clientId: userId },
@@ -53,10 +55,18 @@ export async function getThreadsByUser(userId: string) {
                     type: true,
                     createdAt: true,
                     senderId: true,
+                    read: true,
                 }
             }
         }
     })
+
+    return Promise.all(threads.map(async thread => ({
+        ...thread,
+        unreadCount: await prisma.message.count({
+            where: { threadId: thread.id, senderId: { not: userId }, read: false }
+        })
+    })))
 }
 
 
@@ -122,8 +132,9 @@ export async function deleteThread(threadId: string, userId: string) {
 
     if (!thread) throw new Error('Thread not found')
     if (thread.clientId !== userId) throw new Error('Only the client can close a thread')
-    if (thread.agreement?.status === AgreementStatus.ESCROW_FUNDED) {
-        throw new Error('Cannot close thread with active escrow')
+    if (thread.status === ThreadStatus.CLOSED) throw new Error('Thread already closed')
+    if (thread.agreement && thread.agreement.status !== AgreementStatus.PENDING) {
+        throw new Error('Deal is underway — use endThread to close it with a rating instead')
     }
 
     await prisma.$transaction(async (tx: any) => {
@@ -139,7 +150,7 @@ export async function deleteThread(threadId: string, userId: string) {
         }
 
         await tx.profile.update({
-            where: { userId: thread.agentId || thread.clientId },
+            where: { userId: thread.agentId },
             data: { ongoing: { decrement: 1 } }
         })
 
@@ -165,4 +176,167 @@ export async function updateThreadStatus(
             where: { id: threadId },
             data: { status }
         })
+}
+
+export async function acceptTerms(threadId: string, userId: string) {
+    const thread = await prisma.thread.findUnique({
+        where: { id: threadId },
+        select: { id: true, clientId: true, agentId: true, clientAccepted: true, agentAccepted: true, status: true }
+    })
+    if (!thread) throw new Error('Thread not found')
+    if (thread.clientId !== userId && thread.agentId !== userId) throw new Error('Unauthorized')
+    if (thread.status === 'CLOSED') throw new Error('Thread is closed')
+
+    const isClient = thread.clientId === userId
+    const updated = await prisma.thread.update({
+        where: { id: threadId },
+        data: isClient ? { clientAccepted: true } : { agentAccepted: true },
+        select: { clientAccepted: true, agentAccepted: true }
+    })
+
+    const bothAccepted = updated.clientAccepted && updated.agentAccepted
+    const otherUserId = isClient ? thread.agentId : thread.clientId
+
+    getIO().to(`thread:${threadId}`).emit('thread:termsAccepted', {
+        threadId,
+        userId,
+        clientAccepted: updated.clientAccepted,
+        agentAccepted: updated.agentAccepted,
+        bothAccepted
+    })
+
+    if (bothAccepted) {
+        await Promise.all([
+            notify({ userId: thread.clientId, type: NotificationType.TERMS_ACCEPTED, body: 'Both parties accepted. Chat is now open.', metadata: { threadId } }),
+            notify({ userId: thread.agentId, type: NotificationType.TERMS_ACCEPTED, body: 'Both parties accepted. Chat is now open.', metadata: { threadId } })
+        ])
+    } else {
+        await notify({
+            userId: otherUserId,
+            type: NotificationType.TERMS_PENDING,
+            body: 'The other party has accepted the compliance terms. Awaiting your acceptance.',
+            metadata: { threadId }
+        })
+    }
+}
+
+export async function endThread(
+    threadId: string,
+    userId: string,
+    reason?: string,
+    rating?: { score: number; comment?: string }
+) {
+    const thread = await prisma.thread.findUnique({
+        where: { id: threadId },
+        include: {
+            seek: { select: { id: true, status: true } },
+            agreement: { select: { id: true, status: true } }
+        }
+    })
+    if (!thread) throw new Error('Thread not found')
+    if (thread.clientId !== userId && thread.agentId !== userId) throw new Error('Unauthorized')
+    if (thread.status === 'CLOSED') throw new Error('Thread already closed')
+    if (thread.agreement?.status === AgreementStatus.COMPLETED) {
+        throw new Error('This deal already completed successfully — nothing to end')
+    }
+
+    const isClient = thread.clientId === userId
+    const otherUserId = isClient ? thread.agentId : thread.clientId
+
+    // reaching endThread means the deal never went through completeAgreement's
+    // success path, so ending it here always means the deal is unresolved/failed —
+    // the client must rate it unless it was already rated (e.g. via a prior dispute)
+    let existingReview = null
+    if (isClient && thread.agreement) {
+        existingReview = await prisma.review.findUnique({ where: { threadId } })
+        if (!existingReview && (!rating || rating.score < 1 || rating.score > 5)) {
+            throw new Error('A rating (1-5) is required to end a thread with an active deal')
+        }
+    }
+
+    await prisma.$transaction(async (tx) => {
+        await tx.thread.update({
+            where: { id: threadId },
+            data: {
+                status: 'CLOSED',
+                closedAt: new Date(),
+                endedBy: userId,
+                endReason: reason ?? null
+            }
+        })
+
+        if (thread.agreement) {
+            await tx.agreement.update({
+                where: { id: thread.agreement.id },
+                data: { status: AgreementStatus.DISPUTED }
+            })
+        }
+
+        if (isClient && thread.agreement && !existingReview && rating) {
+            await tx.review.create({
+                data: {
+                    reviewerId: userId,
+                    agentId: thread.agentId,
+                    threadId,
+                    score: rating.score,
+                    comment: rating.comment ?? reason ?? null,
+                }
+            })
+
+            const { _avg, _count } = await tx.review.aggregate({
+                where: { agentId: thread.agentId },
+                _avg: { score: true },
+                _count: { score: true }
+            })
+
+            await tx.profile.update({
+                where: { userId: thread.agentId },
+                data: { rating: _avg.score ?? 3.5, reviewCount: _count.score }
+            })
+        }
+
+        // reject the bid, decrement agent ongoing
+        await tx.bid.updateMany({
+            where: { seekId: thread.seekId, agentId: thread.agentId },
+            data: { status: 'REJECTED' }
+        })
+
+        await tx.profile.update({
+            where: { userId: thread.agentId },
+            data: { ongoing: { decrement: 1 } }
+        })
+
+        // reopen seek slot if thread was still active
+        if (thread.seek && thread.seek.status === 'SELECTING') {
+            await tx.seek.update({
+                where: { id: thread.seek.id },
+                data: { status: 'OPEN' }
+            })
+        }
+    })
+
+    getIO().to(`thread:${threadId}`).emit('thread:ended', {
+        threadId,
+        endedBy: userId,
+        reason: reason ?? null
+    })
+
+    getIO().to(`user:${thread.agentId}`).emit('profile:statsUpdated', { userId: thread.agentId })
+
+    if (isClient && thread.agreement && !existingReview && rating) {
+        getIO().to(`profile:${thread.agentId}`).emit('profile:ratingUpdated', { userId: thread.agentId })
+        await notify({
+            userId: thread.agentId,
+            type: NotificationType.RATING_RECEIVED,
+            body: `You received a ${rating.score}-star rating`,
+            metadata: { reviewerId: userId, threadId, score: rating.score }
+        })
+    }
+
+    await notify({
+        userId: otherUserId,
+        type: NotificationType.THREAD_ENDED,
+        body: 'The other party has ended this thread.',
+        metadata: { threadId }
+    })
 }

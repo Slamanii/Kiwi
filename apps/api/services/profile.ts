@@ -1,11 +1,12 @@
 import { prisma } from '@kiwi/db'
-import { UserRole, UpdateProfileInput, BankDetailsInput, VerificationStatus, NotificationType, AgreementStatus } from '@kiwi/types'
+import { UserRole, UpdateProfileInput, BankDetailsInput, VerificationStatus, NotificationType, AgreementStatus, ApplicationStatus } from '@kiwi/types'
 import { verifyAccountWithPaystack, createPaystackRecipient } from './paystack.js'
 import  { notify } from './notification.js'
 import { getIO } from '../utils/socket.js'
 
 
 export type AgentProfileFilters = {
+    search?: string
     location?: string
     minRate?: number
     maxRate?: number
@@ -38,6 +39,11 @@ export async function getProfile(userId: string) {
                 location: user.profile?.location,
                 createdAt: user.profile?.createdAt,
                 updatedAt: user.profile?.updatedAt,
+                requests: user.profile?.requests,
+                ongoing: user.profile?.ongoing,
+                completedDeals: user.profile?.completedDeals,
+                reviewCount: user.profile?.reviewCount,
+                rating: user.profile?.rating,
             }
     }
 }
@@ -53,41 +59,52 @@ export async function updateProfile(userId: string, data: UpdateProfileInput) {
     if (!user) throw new Error('User not found')
     if (!user.profile) throw new Error('Profile not found')
 
-        const isAgent = user.roles.includes(UserRole.AGENT)
+    const isAgent = user.roles.includes(UserRole.AGENT)
 
-        const profileData: any = {
-            bio: bio ?? undefined,
-            avatarUrl: avatarUrl ?? undefined,
-            location: location ?? undefined,
-        }
+    const profileData: any = {
+        bio: bio ?? undefined,
+        avatarUrl: avatarUrl ?? undefined,
+        location: location ?? undefined,
+    }
 
-        if (isAgent) {
-            profileData.zone = zone ?? undefined,
-            profileData.rate = rate ?? undefined,
-            profileData.policyNote = policyNote ?? undefined,
-            profileData.inspectionFee = inspectionFee ?? undefined
-        }
-        const [updatedProfile] = await prisma.$transaction([
-            prisma.profile.update({
-                where: { userId },
-                data: 
-                    profileData                    
-                
-            }),
-            prisma.user.update({
-                where: { id: userId },
-                data: {
-                    name: name ?? undefined,
-                    phone: phone ?? undefined,
-                }
-            })
-        ])
+    if (isAgent) {
+        profileData.zone = zone ?? undefined
+        profileData.rate = rate ?? undefined
+        profileData.policyNote = policyNote ?? undefined
+        profileData.inspectionFee = inspectionFee ?? undefined
+    }
 
-    
+    const [updatedProfile, updatedUser] = await prisma.$transaction([
+        prisma.profile.update({
+            where: { userId },
+            data: profileData
+        }),
+        prisma.user.update({
+            where: { id: userId },
+            data: {
+                name: name ?? undefined,
+                phone: phone ?? undefined,
+            }
+        })
+    ])
 
+    getIO().to(`profile:${userId}`).emit('profile:updated', {
+        userId,
+        name: updatedUser.name,
+        avatarUrl: updatedProfile.avatarUrl,
+        location: updatedProfile.location,
+        ...(isAgent && {
+            zone: updatedProfile.zone,
+            rate: updatedProfile.rate,
+            policyNote: updatedProfile.policyNote,
+            inspectionFee: updatedProfile.inspectionFee,
+        })
+    })
 
-        return updatedProfile
+    return updatedProfile
 }
+
+
 
 export async function updateBankDetails(userId: string, data: BankDetailsInput) {
     const { accountNumber, bankCode, accountName } = data
@@ -112,32 +129,106 @@ export async function updateBankDetails(userId: string, data: BankDetailsInput) 
         })
 }
 
+export async function submitVerificationRequest(
+    userId: string,
+    data: { nin: string; idType: string; idNumber: string; idDocumentUrl: string; selfieUrl: string }
+) {
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new Error('User not found')
+    if (user.verificationStatus === VerificationStatus.VERIFIED) {
+        throw new Error('You are already verified')
+    }
+
+    const existing = await prisma.verificationRequest.findFirst({
+        where: { userId, status: ApplicationStatus.PENDING }
+    })
+    if (existing) throw new Error('You already have a pending verification request')
+
+    const [request] = await prisma.$transaction([
+        prisma.verificationRequest.create({ data: { userId, ...data } }),
+        prisma.user.update({
+            where: { id: userId },
+            data: { verificationStatus: VerificationStatus.PENDING }
+        })
+    ])
+
+    return request
+}
+
+export const MAX_CATALOG_ITEMS = 10
+
+export async function getCatalog(userId: string) {
+    const items = await prisma.catalogItem.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, url: true, type: true, caption: true, createdAt: true }
+    })
+
+    return { items }
+}
+
+export async function getCatalogItem(itemId: string) {
+    const item = await prisma.catalogItem.findUnique({
+        where: { id: itemId },
+        select: { id: true, userId: true, url: true, type: true, caption: true, createdAt: true }
+    })
+    if (!item) throw new Error('Catalog item not found')
+
+    return item
+}
+
+export async function addCatalogItem(userId: string, data: { url: string; type: 'IMAGE' | 'VIDEO'; caption?: string }) {
+    const count = await prisma.catalogItem.count({ where: { userId } })
+    if (count >= MAX_CATALOG_ITEMS) throw new Error('Catalog is full. Remove an item before adding a new one.')
+
+    return prisma.catalogItem.create({
+        data: {
+            userId,
+            url: data.url,
+            type: data.type,
+            caption: data.caption ?? null,
+        }
+    })
+}
+
+export async function deleteCatalogItem(userId: string, itemId: string) {
+    const item = await prisma.catalogItem.findUnique({ where: { id: itemId } })
+    if (!item) throw new Error('Catalog item not found')
+    if (item.userId !== userId) throw new Error('Not authorized to delete this catalog item')
+
+    await prisma.catalogItem.delete({ where: { id: itemId } })
+    return { id: itemId }
+}
+
 export async function getAgentProfiles(filters: AgentProfileFilters = {}) {
-    const { location, minRate, maxRate, minRating, cursor, verifiedOnly, limit = 20 } = filters 
+    const { search, location, minRate, maxRate, minRating, cursor, verifiedOnly, limit = 20 } = filters
 
     const agents = await prisma.user.findMany({
         take: limit + 1,
         ...(cursor && { skip: 1, cursor: { id: cursor }}),
         where: {
             roles: { has: UserRole.AGENT },
+            ...(search && { name: { contains: search, mode: 'insensitive' } }),
+            ...(verifiedOnly && { verificationStatus: VerificationStatus.VERIFIED }),
             profile: {
                 ...(location && { location: { contains: location, mode: 'insensitive' } }),
                 ...(minRate !== undefined && { rate: { gte: minRate } }),
                 ...(maxRate !== undefined && { rate: { lte: maxRate } }),
                 ...(minRating !== undefined && { rating: { gte: minRating } }),
-                ...(verifiedOnly && { verificationStatus: VerificationStatus.VERIFIED})
             }
         },
         select: {
             id: true,
             name: true,
+            verificationStatus: true,
             profile: {
                 select: {
                     avatarUrl: true,
+                    bio: true,
                     location: true,
+                    zone: true,
                     rate: true,
                     rating: true,
-                    verificationStatus: true,
                     policyNote: true,
                     inspectionFee: true,
                 }
@@ -149,15 +240,20 @@ export async function getAgentProfiles(filters: AgentProfileFilters = {}) {
     const hasMore = agents.length > limit
     if (hasMore) agents.pop()
 
-        return {
-            agents,
-            nextCursor: hasMore ? agents[agents.length - 1].id : null
-        }
+    const shaped = agents.map(({ verificationStatus, profile, ...rest }) => ({
+        ...rest,
+        profile: profile ? { ...profile, verificationStatus } : profile
+    }))
+
+    return {
+        agents: shaped,
+        nextCursor: hasMore ? shaped[shaped.length - 1].id : null
+    }
 }
 
 
 export async function searchUsers(query: string, limit = 20) {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
         take: limit,
         where: {
             name: { contains: query, mode: 'insensitive' }
@@ -166,14 +262,19 @@ export async function searchUsers(query: string, limit = 20) {
             id: true,
             name: true,
             roles: true,
+            verificationStatus: true,
             profile: {
                 select: {
                     avatarUrl: true,
-                    verificationStatus: true,
                 }
             }
         }
     })
+
+    return users.map(({ verificationStatus, profile, ...rest }) => ({
+        ...rest,
+        profile: profile ? { ...profile, verificationStatus } : profile
+    }))
 }
 
 export async function submitRating(
@@ -191,13 +292,13 @@ export async function submitRating(
     if (!thread) throw new Error('Thread not found')
     if (thread.clientId !== reviewerId) throw new Error('Only the client can submit a rating')
     if (!thread.agreement || ![AgreementStatus.COMPLETED, AgreementStatus.DISPUTED].includes(thread.agreement.status as 'COMPLETED' | 'DISPUTED')) {
-        throw new Error('Thread must be completed or disputed before submitting a rating')
+        throw new Error('Agreement must be completed or disputed before submitting a rating')
     }
 
     const existing = await prisma.review.findUnique({ where: { threadId } })
     if (existing) throw new Error('You have already rated this agent for this transaction')
 
-    const review = await prisma.$transaction(async (tx: any) => {
+    const { review, rating, reviewCount } = await prisma.$transaction(async (tx: any) => {
         const created = await tx.review.create({
             data: {
                 reviewerId,
@@ -222,26 +323,28 @@ export async function submitRating(
             }
         })
 
-        getIO().to(`profile:${agentId}`).emit('profile:ratingUpdated', {
-            userId: agentId,
+        return {
+            review: created,
             rating: _avg.score ?? 3.5,
-            reviewCount: _count.score,
-        })
+            reviewCount: _count.score
+        }
+    })
 
-        return created
+    getIO().to(`profile:${agentId}`).emit('profile:ratingUpdated', {
+        userId: agentId,
+        rating,
+        reviewCount,
     })
 
     await notify({
         userId: agentId,
         type: NotificationType.RATING_RECEIVED,
-        title: "Rating just in",
         body: `You received a ${data.score}-star rating`,
         metadata: { reviewerId, threadId, score: data.score }
     })
 
     return review
 }
-
 export async function getRatings(agentId: string, limit = 20) {
     return prisma.review.findMany({
         take: limit,

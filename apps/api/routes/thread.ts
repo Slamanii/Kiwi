@@ -8,26 +8,44 @@ import {
   updateThreadStatus,
 } from '../services/thread.js'
 import {
-  createAgreementForm,
+  proposeAgreementFee,
+  acceptAgreementFee,
+  endNegotiation,
   answerAgreementItem,
   signAgreement,
   getAgreementByThread,
   completeAgreement,
+  disputeAgreement,
 } from '../services/agreement.js'
-import { ThreadStatus, AgreementStage } from '@kiwi/types'
+import { ThreadStatus, AgreementSentiment } from '@kiwi/types'
+import { acceptTerms, endThread } from '../services/thread.js'
+import { getThreadProgress, submitAssessment } from '../services/assessment.js'
+
+
 
 const router = Router()
 
-const createAgreementSchema = z.object({
+const proposeFeeSchema = z.object({
   agentFee: z.number().positive(),
-  items: z.array(z.object({
-    requirement: z.string().min(1),
-    stage: z.nativeEnum(AgreementStage),
-  })).min(1),
 })
 
 const answerItemSchema = z.object({
-  answer: z.string().min(1),
+  sentiment: z.nativeEnum(AgreementSentiment),
+  answer: z.string().optional(),
+})
+
+const ratingSchema = z.object({
+  score: z.number().min(1).max(5),
+  comment: z.string().optional(),
+})
+
+const endThreadSchema = z.object({
+  reason: z.string().optional(),
+  rating: ratingSchema.optional(),
+})
+
+const disputeSchema = z.object({
+  reason: z.string().optional(),
 })
 
 // get all threads for current user
@@ -79,17 +97,39 @@ router.patch('/:threadId/status', requireAuth, async (req: Request, res: Respons
   }
 })
 
-// create agreement form
-router.post('/:threadId/agreement', requireAuth, async (req: Request, res: Response) => {
-  const parsed = createAgreementSchema.safeParse(req.body)
+// propose/counter the agent fee
+router.post('/:threadId/agreement/propose', requireAuth, async (req: Request, res: Response) => {
+  const parsed = proposeFeeSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() })
   }
 
   try {
-    const clientId = req.user?.userId as string
-    const result = await createAgreementForm(req.params.threadId, clientId, parsed.data)
-    return res.status(201).json(result)
+    const userId = req.user?.userId as string
+    const result = await proposeAgreementFee(req.params.threadId, userId, parsed.data.agentFee)
+    return res.status(200).json(result)
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+// accept the current agent fee proposal
+router.post('/:threadId/agreement/accept', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId as string
+    const result = await acceptAgreementFee(req.params.threadId, userId)
+    return res.status(200).json(result)
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+// end the fee negotiation (before an agreement is accepted)
+router.post('/:threadId/agreement/end', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId as string
+    await endNegotiation(req.params.threadId, userId)
+    return res.status(200).json({ message: 'Negotiation ended' })
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
   }
@@ -115,7 +155,7 @@ router.patch('/agreement/items/:itemId', requireAuth, async (req: Request, res: 
 
   try {
     const userId = req.user?.userId as string
-    const result = await answerAgreementItem(req.params.itemId, userId, parsed.data.answer)
+    const result = await answerAgreementItem(req.params.itemId, userId, parsed.data.sentiment, parsed.data.answer)
     return res.status(200).json(result)
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
@@ -135,13 +175,74 @@ router.post('/agreement/:agreementId/sign', requireAuth, async (req: Request, re
 
 // complete agreement
 router.post('/agreement/:agreementId/complete', requireAuth, async (req: Request, res: Response) => {
+  const parsed = ratingSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() })
+  }
+
   try {
     const clientId = req.user?.userId as string
-    await completeAgreement(req.params.agreementId, clientId)
+    await completeAgreement(req.params.agreementId, clientId, parsed.data)
     return res.status(200).json({ message: 'Agreement completed' })
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
   }
 })
+
+// dispute agreement
+router.post('/agreement/:agreementId/dispute', requireAuth, async (req: Request, res: Response) => {
+  const parsed = disputeSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() })
+  }
+
+  try {
+    const userId = req.user?.userId as string
+    const result = await disputeAgreement(req.params.agreementId, userId, parsed.data.reason)
+    return res.status(200).json(result)
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+
+// compliance
+router.post('/:id/accept', requireAuth, async (req, res) => {
+  const clientId = req.user?.userId as string
+    await acceptTerms(req.params.id, clientId)
+    res.json({ success: true })
+})
+
+// end thread
+router.post('/:id/end', requireAuth, async (req, res) => {
+    const parsed = endThreadSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    try {
+      const userId = req.user?.userId as string
+      await endThread(req.params.id, userId, parsed.data.reason, parsed.data.rating)
+      res.json({ success: true })
+    } catch (err: any) {
+      res.status(400).json({ error: err.message })
+    }
+})
+
+// PA
+router.get('/:id/assessment', requireAuth, async (req, res) => {
+  const clientId = req.user?.userId as string
+    const data = await getThreadProgress(req.params.id, clientId)
+    res.json(data)
+})
+
+router.post('/:id/assessment', requireAuth, async (req, res) => {
+    const clientId = req.user?.userId as string
+    const { mood, healthTags, milestones, comment } = req.body
+    await submitAssessment(req.params.id, clientId, { mood, healthTags, milestones, comment })
+    res.json({ success: true })
+})
+
+
 
 export default router

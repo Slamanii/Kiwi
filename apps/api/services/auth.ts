@@ -6,6 +6,7 @@ import { config } from '../config.js'
 import type { SignupInput, LoginInput, BecomeAnAgentRequest } from '@kiwi/types'
 import crypto from 'crypto'
 import { sendPasswordResetEmail, sendEmailVerificationEmail } from './email.js'
+import { verifyAccountWithPaystack, createPaystackRecipient } from './paystack.js'
 import { JwtPayload } from 'jsonwebtoken'
 import jwt  from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
@@ -36,7 +37,7 @@ export async function signUp(input: SignupInput) {
             data: {
                 name,
                 email,
-                password: passwordHash,
+                passwordHash,
                 roles: [UserRole.CLIENT],
                 referralCode: newReferralCode,
                 referredBy: null,
@@ -50,10 +51,15 @@ export async function signUp(input: SignupInput) {
         return created
     })
 
-        const tokens = signTokens(user.id, user.roles)
+        const { accessToken, refreshToken } = signTokens(user.id, user.roles)
 
-        return { user, tokens }
-    
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken }
+        })
+
+        return { user, accessToken, refreshToken }
+
 }
 
 export async function requestPasswordReset(email: string) {
@@ -92,9 +98,9 @@ export async function resetPassword(email: string, newPassword:string, resetToke
         const passwordHash = await hashPassword(newPassword);
         await prisma.user.update({
             where: { email },
-            data: { password: passwordHash, resetToken: null, resetTokenExpiry: null }
+            data: { passwordHash, resetToken: null, resetTokenExpiry: null }
         })
-        
+
     }
 
 export async function refreshToken(token: string) {
@@ -106,7 +112,7 @@ export async function refreshToken(token: string) {
     }
 
     const user = await prisma.user.findUnique({
-        where: { id: payload.id },
+        where: { id: payload.userId },
         select: { id: true, roles: true, refreshToken: true }
     })
     if (!user || user.refreshToken !== token) throw new Error('Refresh token revoked')
@@ -195,10 +201,15 @@ export async function login(input: LoginInput) {
         const valid = await comparePassword(password, user.passwordHash)
         if (!valid) throw new Error("Invalid email or password")
 
-            const access_tokens = signTokens(user.id, user.roles)
+            const { accessToken, refreshToken } = signTokens(user.id, user.roles)
 
-        return { user, access_tokens }
-} 
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken }
+        })
+
+        return { user, accessToken, refreshToken }
+}
 
 function signTokens(userId: string, roles: UserRole[]) {
     const payload = { userId, roles }
@@ -211,7 +222,7 @@ function signTokens(userId: string, roles: UserRole[]) {
 
     const refreshToken = generateRefreshToken(
         payload,
-        config.JWT_SECRET,
+        config.REFRESH_TOKEN_SECRET,
         '30d'
     )
 
@@ -219,7 +230,7 @@ function signTokens(userId: string, roles: UserRole[]) {
 }
 
 export async function becomeAnAgent(request: BecomeAnAgentRequest) {
-    const { userId, zone, rate, policyNote, idType, idNumber, idDocumentUrl, bio, phone, agentReferralCode } = request
+    const { userId, zone, rate, policyNote, nin, idType, idNumber, idDocumentUrl, accountNumber, bankCode, accountName, bio, phone, agentReferralCode } = request
 
     const user = await prisma.user.findUnique({
         where: { id: userId }
@@ -237,20 +248,30 @@ export async function becomeAnAgent(request: BecomeAnAgentRequest) {
     let referrer = null
 
         if (agentReferralCode) {
-            referrer = await prisma.user.findFirst({ where: { referralCode: agentReferralCode, roles: { has: UserRole.AGENT} } })
+            referrer = await prisma.user.findFirst({ where: { referralCode: agentReferralCode, roles: { hasSome: [UserRole.AGENT, UserRole.ADMIN] } } })
             if (!referrer) throw new Error("Invalid referral Code")
         }
+
+    const verified = await verifyAccountWithPaystack(accountNumber, bankCode)
+    if (!verified) throw new Error('Could not verify bank account')
+
+    const recipientCode = await createPaystackRecipient({ accountNumber, bankCode, accountName })
 
     const application = await prisma.$transaction(async (tx: any) => {
         const app = await tx.agentApplication.create({
             data: {
                 userId,
+                phone: phone ?? undefined,
                 zone,
                 rate,
                 policyNote,
+                nin,
                 idType,
                 idNumber,
                 idDocumentUrl,
+                accountNumber,
+                bankCode,
+                accountName,
                 agentReferralCode,
             }
         })
@@ -282,7 +303,11 @@ export async function becomeAnAgent(request: BecomeAnAgentRequest) {
             where: { id: userId },
             data: {
                 phone: phone ?? undefined,
-                referredBy: referrer?.id ?? undefined
+                referredBy: referrer?.id ?? undefined,
+                accountNumber,
+                bankCode,
+                accountName,
+                paystackRecipientCode: recipientCode,
             }
         })
 
@@ -290,29 +315,6 @@ export async function becomeAnAgent(request: BecomeAnAgentRequest) {
     })
 
     return application
-}
-
-export async function approveAgentApplication(applicationId: string) {
-    const application = await prisma.agentApplication.findUnique({
-        where: { id: applicationId }
-    })
-
-    if (!application) throw new Error('Application not found')
-    if (application.status !== 'PENDING') throw new Error('Application already reviewed')
-
-        await prisma.$transaction(async (tx: any) => {
-            await tx.agentApplication.update({
-                where: { id: applicationId },
-                data: { status: 'APPROVED', reviewedAt: new Date() }
-            })
-
-            await tx.user.update({
-                where: { id: application.userId },
-                data: {
-                    roles: { push: UserRole.AGENT }
-                }
-            })
-        })
 }
 
 //delete account

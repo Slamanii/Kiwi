@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { getSocketUrl } from '@/lib/socketUrl'
 
 
 let socket: Socket | null = null
@@ -7,7 +8,7 @@ let socket: Socket | null = null
 export function getSocket() {
 
     if (!socket) {
-        socket = io(process.env.APP_URL!, {
+        socket = io(getSocketUrl(), {
             autoConnect: true,
             reconnection: true,
             reconnectionAttempts: 5,

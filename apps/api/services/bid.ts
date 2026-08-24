@@ -1,8 +1,8 @@
-import { BidStatus, SeekStatus, ThreadStatus, UserRole } from '@kiwi/types'
+import { BidStatus, SeekStatus, ThreadStatus, UserRole, NotificationType, AgreementStatus } from '@kiwi/types'
 import { prisma } from '@kiwi/db'
 import { CreateBidInput } from '@kiwi/types'
 import { getIO } from '../utils/socket.js'
-
+import { notify } from './notification.js'
 
 
 export async function createBid(agentId: string, data: CreateBidInput) {
@@ -26,7 +26,11 @@ export async function createBid(agentId: string, data: CreateBidInput) {
                         seekId: data.seekId,
                         agentId,
                         rate: data.rate,
-                        message: data.message
+                        amount: data.amount,
+                        currency: data.currency ?? 'NGN',
+                        message: data.message,
+                        images: data.images ?? [],
+                        videoUrl: data.videoUrl,
                     },
                     include: {
                         agent: {
@@ -64,10 +68,11 @@ export async function createBid(agentId: string, data: CreateBidInput) {
                 bidCount: bid.updatedSeek.bidCount
             })
 
-            getIO().to(`user:${bid.updatedSeek.authorId}`).emit('notification:new', {
-                type: 'NEW_BID',
-                seekId: data.seekId,
-                message: 'A new agent has bid on your seek'
+            await notify({
+                userId: bid.updatedSeek.authorId,
+                type: NotificationType.NEW_BID,
+                body: 'A new agent has bid on your seek',
+                metadata: { seekId: data.seekId }
             })
             return bid
 }
@@ -137,6 +142,27 @@ export async function getMyBids(agentId: string) {
 }
 
 
+
+export async function getReceivedBids(userId: string) {
+    return prisma.bid.findMany({
+        where: { seek: { authorId: userId } },
+        orderBy: { createdAt: 'desc' },
+        include: {
+            seek: {
+                select: { id: true, content: true, type: true, location: true, budget: true }
+            },
+            agent: {
+                select: {
+                    id: true,
+                    name: true,
+                    profile: {
+                        select: { avatarUrl: true, rating: true, reviewCount: true }
+                    }
+                }
+            }
+        }
+    })
+}
 
 export async function getBidById(bidId: string, requestingUserId: string) {
     const bid = await prisma.bid.findUnique({
@@ -215,7 +241,7 @@ export async function selectBid(bidId: string, clientId: string) {
         if (activeThreadCount >= 5) throw new Error('Maximum of 5 agents already selected')
 
 
-        const result = await prisma.$transaction(async (tx: any) => {
+        const thread = await prisma.$transaction(async (tx: any) => {
             await tx.bid.update({
                 where: { id: bidId },
                 data: { status: BidStatus.SELECTED }
@@ -235,6 +261,15 @@ export async function selectBid(bidId: string, clientId: string) {
             data: {  ongoing: { increment: 1 }}
         })
 
+        await tx.agreement.create({
+            data: {
+                threadId: thread.id,
+                agentFee: bid.amount,
+                proposedBy: bid.agentId,
+                status: AgreementStatus.PENDING,
+            }
+        })
+
         const threadCount = await tx.thread.count({
             where: { seekId: bid.seekId }
         })
@@ -247,7 +282,49 @@ export async function selectBid(bidId: string, clientId: string) {
         }
          return thread
         })
-         return result
+
+    const profile = await prisma.profile.findUnique({ where: { userId: bid.agentId } })
+        getIO().to(`profile:${bid.agentId}`).emit('profile:statsUpdated', {
+        userId: bid.agentId,
+        requests: profile?.requests,
+        ongoing: profile?.ongoing,
+        completedDeals: profile?.completedDeals,
+    })
+
+     getIO().to(`seek:${bid.seekId}`).emit('seek:bidSelected', {
+        seekId: bid.seekId,
+        threadId: thread.id,
+        agentId: bid.agentId,
+    })
+    
+    getIO().to(`user:${clientId}`).emit('thread:new', thread)
+    
+    getIO().to(`user:${bid.agentId}`).emit('thread:new', thread)
+
+
+    // after thread is created and agent is notified of bid selection:
+    await Promise.all([
+      notify({
+        userId: bid.agentId,
+        type: NotificationType.COMPLIANCE_REQUIRED,
+        body: 'A thread has been opened. Accept the compliance terms to unlock messaging.',
+        metadata: { threadId: thread.id }
+    }),
+    notify({
+        userId: clientId,
+        type: NotificationType.COMPLIANCE_REQUIRED,
+        body: 'You selected a bid. Accept the compliance terms to start messaging.',
+        metadata: { threadId: thread.id }
+    }),
+    notify({
+        userId: clientId,
+        type: NotificationType.AGREEMENT_SENT,
+        body: `The agent proposed a fee of ₦${bid.amount.toLocaleString()} for this deal.`,
+        metadata: { threadId: thread.id }
+    })
+])
+
+         return thread
 }
 
 

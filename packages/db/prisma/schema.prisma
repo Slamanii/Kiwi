@@ -19,8 +19,9 @@ datasource db {
 enum UserRole {
   CLIENT
   AGENT
-  LAWYER
+  DESIGNER
   DEVELOPER
+  ADMIN
 }
 
 enum ApplicationStatus {
@@ -87,16 +88,25 @@ enum ThreadStatus {
 enum AgreementStatus {
   PENDING
   SIGNED
-  ESCROW_FUNDED
   IN_PROGRESS
   COMPLETED
   DISPUTED
 }
 
 enum AgreementStage {
-  BEFORE    
-  DURING     
-  AFTER     
+  BEFORE
+  DURING
+  AFTER
+}
+
+enum AgreementItemKind {
+  CONTENT
+  CHECKPOINT
+}
+
+enum AgreementSentiment {
+  GOOD
+  BAD
 }
 
 enum TransactionType {
@@ -119,14 +129,32 @@ enum NotificationType {
   BID_REJECTED
   NEW_MESSAGE
   AGREEMENT_SENT
+  AGREEMENT_ACCEPTED
   AGREEMENT_SIGNED
   ESCROW_FUNDED
   DEAL_COMPLETED
+  DEAL_DISPUTED
   NEW_RESEEK
   RATING_RECEIVED
   APPLICATION_REJECTED
+  APPLICATION_APPROVED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  COMPLIANCE_REQUIRED
+  TERMS_PENDING
+  TERMS_ACCEPTED
+  PA_DUE
+  THREAD_STALLED
+  THREAD_ENDED
   ACCOUNT_BANNED
   REFERRAL_PAID
+  NEW_ORDER
+  AGREEMENT_ITEM_DUE
+  COMMUNITY_JOIN_REQUEST
+  COMMUNITY_JOIN_ACCEPTED
+  COMMUNITY_JOIN_DECLINED
+  ORDER_MESSAGE
+  ORDER_COMPLETED
   SYSTEM
 }
 
@@ -150,6 +178,7 @@ enum MessageType {
   AUDIO
   FILE
   VIDEO
+  POLL
 }
 
 enum CommunityRole {
@@ -170,6 +199,31 @@ enum TrendingCategory {
   ROOMS
   INFO
 }
+enum PAMilestone {
+  FIRST_CONTACT
+  INSPECTION_SCHEDULED
+  INSPECTION_DONE
+  NEGOTIATING
+  DOCUMENTS_SUBMITTED
+  AGREEMENT_SIGNED
+  PAID
+  COMPLETED
+}
+
+enum PAHealthTag {
+  COMMUNICATING_WELL
+  SLOW_RESPONSE
+  NOT_GOING_ANYWHERE
+  WAITING_ON_LANDLORD
+  PRICE_DISPUTE
+}
+
+enum PAMood {
+  GOOD
+  OKAY
+  BAD
+}
+
 
 
 
@@ -195,16 +249,19 @@ model User {
   paystackRecipientCode String?
   resetToken            String?
   resetTokenExpiry      DateTime?
+  refreshToken          String?
   pendingEmail          String?
   emailVerifyToken      String?
   emailVerifyExpires    DateTime?
   isBanned              Boolean           @default(false)
+  lastSeenAt            DateTime?
   systemReview          SystemReview[]
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
   profile                Profile?
   agentApplication       AgentApplication?
+  verificationRequests   VerificationRequest[]
   seeks                  Seek[]
   bids                   Bid[]
   threadsAsClient        Thread[]           @relation("ClientThreads")
@@ -223,7 +280,59 @@ model User {
   communityMessages      CommunityMessage[]
   ReviewsGiven           Review[]           @relation("ReviewsGiven")
   reveiewsReceived       Review[]           @relation("ReviewsReceived")
+  assessments            ProgressAssessment[]
   deviceTokens           DeviceToken[]
+  catalogItems           CatalogItem[]
+  listingsCreated        Listing[]
+  listingBids            ListingBid[]
+  orders                 Order[] @relation("OrderBuyer")
+  claimedOrders          Order[] @relation("OrderClaimedByAdmin")
+  orderMessages          OrderMessage[]
+  storeConversations     StoreConversation[]
+  favoriteListings       ListingFavorite[]
+  communityReviews       CommunityReview[]
+  blockedUsers           BlockedUser[]           @relation("Blocker")
+  blockedBy              BlockedUser[]           @relation("Blocked")
+  conversationPrefs      ConversationPreference[]
+  communityJoinRequests  CommunityJoinRequest[]
+  pollsCreated           Poll[]
+  pollVotes              PollVote[]
+}
+
+model BlockedUser {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+enum ConversationType {
+  THREAD
+  DM
+  COMMUNITY
+  ORDER
+}
+
+model ConversationPreference {
+  id               String           @id @default(cuid())
+  userId           String
+  conversationType ConversationType
+  conversationId   String
+  muted            Boolean          @default(false)
+  pinned           Boolean          @default(false)
+  pinnedAt         DateTime?
+  archived         Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationType, conversationId])
 }
 
 model Profile {
@@ -247,14 +356,33 @@ model Profile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+enum CatalogItemType {
+  IMAGE
+  VIDEO
+}
+
+model CatalogItem {
+  id        String          @id @default(cuid())
+  userId    String
+  url       String
+  type      CatalogItemType
+  caption   String?
+  createdAt DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model AgentApplication {
   id            String   @id @default(cuid())
   userId        String   @unique
   agentReferralCode  String?
-  phone         String
+  phone         String?
   zone          String
   rate          Float
   policyNote    String
+  nin           String
   idType        String
   idNumber      String
   idDocumentUrl String
@@ -262,7 +390,7 @@ model AgentApplication {
   accountNumber         String
   bankCode              String
   accountName           String
-  rejectionReason   String
+  rejectionReason   String?
   reviewedAt    DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -270,36 +398,80 @@ model AgentApplication {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Seek {
-  id           String        @id @default(cuid())
-  isReseek     Boolean       @default(false)
-  originalSeekId String?
-  originalSeek  Seek?        @relation("ReseekOriginal", fields: [originalSeekId], references: [id])
-  reseeksOf     Seek[]       @relation("ReseekOriginal")
-  authorId     String
-  content      String
-  type         SeekType      @default(LOOKING_TO_RENT)
-  status       SeekStatus    @default(OPEN)
-  propertyType PropertyType?
-  budget       Float?
-  location     String?
-  zone         String?
-  urgency      UrgencyLevel  @default(NORMAL)
-  rooms        Int?
-  isSingle     Boolean?
-  hasPets      Boolean?
-  comments     SeekComment[]
-  commentCount Int           @default(0) 
-  commentsEnabled Boolean     @default(true)   
-  likeCount    Int           @default(0)
-  reseekCount  Int           @default(0)
-  bidCount     Int           @default(0)
-  trendingEntries  TrendingSeek[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  expiresAt    DateTime?
+model VerificationRequest {
+  id            String            @id @default(cuid())
+  userId        String
+  nin           String
+  idType        String
+  idNumber      String
+  idDocumentUrl String
+  selfieUrl     String
+  status        ApplicationStatus @default(PENDING)
+  rejectionReason String?
+  reviewedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Seek {
+  id             String        @id @default(cuid())
+  isReseek       Boolean       @default(false)
+  originalSeekId String?
+  originalSeek   Seek?         @relation("ReseekOriginal", fields: [originalSeekId], references: [id])
+  reseeksOf      Seek[]        @relation("ReseekOriginal")
+  authorId       String
+  content        String
+  type           SeekType      @default(LOOKING_TO_RENT)
+  status         SeekStatus    @default(OPEN)
+  propertyType   PropertyType?
+  isShortlet     Boolean       @default(false)
+  budget         Float?
+  currency       String?       @default("NGN")
+  location       String?
+  state          String?
+  zone           String?
+  urgency        UrgencyLevel  @default(NORMAL)
+  rooms          Int?
+  city           String
+
+  // seeker profile (LOOKING_TO_RENT / LOOKING_TO_BUY)
+  isSingle       Boolean?
+  hasPets        Boolean?
+  hasChildren    Boolean?
+  isStudent      Boolean?
+  worksFromHome  Boolean?
+  needsMortgage  Boolean?
+  hasLegalRep    Boolean?
+
+  // listing tolerances (PROPERTY_FOR_RENT)
+  allowsSingle   Boolean?
+  allowsPets     Boolean?
+  allowsChildren Boolean?
+
+  // property features (PROPERTY_FOR_RENT / PROPERTY_FOR_SALE)
+  isFurnished        Boolean?
+  hasParking         Boolean?
+  hasGenerator       Boolean?
+  hasWater           Boolean?
+  hasCofO            Boolean?
+  hasFlexiblePayment Boolean?
+
+  comments        SeekComment[]
+  commentCount    Int           @default(0)
+  commentsEnabled Boolean       @default(true)
+  likeCount       Int           @default(0)
+  reseekCount     Int           @default(0)
+  bidCount        Int           @default(0)
+  trendingEntries TrendingSeek[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  expiresAt       DateTime?
+
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
   bids      Bid[]
   threads   Thread[]
   likes     SeekLike[]
@@ -312,7 +484,7 @@ model SeekComment {
   seekId    String
   userId    String
   content   String
-  parentId  String
+  parentId  String?
   likeCount Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -373,7 +545,11 @@ model Bid {
   seekId    String
   agentId   String
   rate      Float
+  amount    Float
+  currency  String?   @default("NGN")
   message   String
+  images    String[]  @default([])
+  videoUrl  String?
   status    BidStatus @default(PENDING)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -391,9 +567,15 @@ model Thread {
   agentId   String
   review    Review?
   status    ThreadStatus @default(ACTIVE)
+  clientAccepted  Boolean @default(false)
+  agentAccepted   Boolean @default(false)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   closedAt  DateTime?
+  endedBy   String?
+  endReason String?
+  assessments ProgressAssessment[]
+  milestones  ThreadMilestone[]
 
   seek      Seek       @relation(fields: [seekId], references: [id], onDelete: Cascade)
   client    User       @relation("ClientThreads", fields: [clientId], references: [id])
@@ -403,6 +585,37 @@ model Thread {
 
   @@unique([seekId, agentId])
 }
+
+model ProgressAssessment {
+  id          String       @id @default(cuid())
+  threadId    String
+  userId      String
+  weekNumber  Int
+  year        Int
+  mood        PAMood?
+  healthTags  PAHealthTag[]
+  comment     String?
+  submittedAt DateTime?
+  createdAt   DateTime     @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([threadId, userId, weekNumber, year])
+}
+
+model ThreadMilestone {
+  id         String      @id @default(cuid())
+  threadId   String
+  milestone  PAMilestone
+  reachedBy  String      // userId who marked it
+  reachedAt  DateTime    @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, milestone]) // can't add same milestone twice
+}
+
 
 model Message {
   id            String      @id @default(cuid())
@@ -414,10 +627,20 @@ model Message {
   mediaSize     Int?
   mediaDuration Int?
   fileName      String?
+  read          Boolean     @default(false)
+  deleted       Boolean     @default(false)
+  deletedAt     DateTime?
+  pinned        Boolean     @default(false)
+  pinnedAt      DateTime?
+  archived      Boolean     @default(false)
+  archivedAt    DateTime?
+  replyToId     String?
   createdAt     DateTime    @default(now())
 
-  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sender User   @relation(fields: [senderId], references: [id])
+  thread  Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender  User      @relation(fields: [senderId], references: [id])
+  replyTo Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Message[] @relation("MessageReply")
 }
 
 model Agreement {
@@ -427,10 +650,13 @@ model Agreement {
   agentFee  Float
   escrowRef String?
   documentUrl String?
+  disputeReason String?
+  disputedBy    String?
   clientSignedAt DateTime?
   agentSignedAt  DateTime?
   clientSignature String?
   agentSignature  String?
+  proposedBy      String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
@@ -446,9 +672,14 @@ model AgreementItem {
   completed   Boolean   @default(false)
   completedAt DateTime?
   stage       AgreementStage @default(BEFORE)
+  order       Int                 @default(0)
+  kind        AgreementItemKind   @default(CONTENT)
+  sentiment   AgreementSentiment?
+  unlocksAt   DateTime?
+  notifiedAt  DateTime?
   answer      String?
   answeredAt  DateTime?
-  answeredBy  String?        
+  answeredBy  String?
 
   agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
 }
@@ -513,6 +744,22 @@ model Community {
   members  CommunityMember[]
   messages CommunityMessage[]
   messagingMode CommunityMessagingMode @default(ADMIN_ONLY)
+  type          CommunityType          @default(STANDARD)
+  category      CommunityCategory      @default(GENERAL)
+  requireApproval Boolean              @default(false)
+  listings      Listing[]
+  joinRequests  CommunityJoinRequest[]
+  orders        Order[]
+  storeConversations StoreConversation[]
+  polls         Poll[]
+
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  dealsCompleted      Int      @default(0)
+  dealsOngoing        Int      @default(0)
+  rating              Float?   @default(0)
+  reviewCount         Int      @default(0)
+  listingCount        Int      @default(0)
+  reviews             CommunityReview[]
 }
 
 model CommunityMember {
@@ -539,10 +786,285 @@ model CommunityMessage {
   mediaSize   Int?
   mediaDuration Int?
   fileName    String?
+  listingId   String?
+  pollId      String?     @unique
+  deleted     Boolean     @default(false)
+  deletedAt   DateTime?
+  pinned      Boolean     @default(false)
+  pinnedAt    DateTime?
+  archived    Boolean     @default(false)
+  archivedAt  DateTime?
+  replyToId   String?
   createdAt   DateTime    @default(now())
 
+  community Community        @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  sender    User             @relation(fields: [senderId], references: [id])
+  listing   Listing?         @relation(fields: [listingId], references: [id])
+  poll      Poll?            @relation(fields: [pollId], references: [id])
+  replyTo   CommunityMessage?  @relation("CommunityMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   CommunityMessage[] @relation("CommunityMessageReply")
+}
+
+model Poll {
+  id            String    @id @default(cuid())
+  communityId   String
+  creatorId     String
+  question      String
+  allowMultiple Boolean   @default(false)
+  closesAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  community Community        @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  creator   User             @relation(fields: [creatorId], references: [id])
+  options   PollOption[]
+  votes     PollVote[]
+  message   CommunityMessage?
+}
+
+model PollOption {
+  id     String @id @default(cuid())
+  pollId String
+  text   String
+  order  Int    @default(0)
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, userId])
+}
+
+enum CommunityType {
+  STANDARD
+  MARKETPLACE
+}
+
+enum CommunityCategory {
+  NEIGHBORHOOD
+  REAL_ESTATE
+  INTERIOR_DESIGN
+  PROPERTY_INVESTMENT
+  AGENTS_PROFESSIONALS
+  STUDENT_HOUSING
+  HOME_SERVICES
+  GENERAL
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model CommunityJoinRequest {
+  id          String             @id @default(cuid())
+  communityId String
+  userId      String
+  status      JoinRequestStatus  @default(PENDING)
+  createdAt   DateTime           @default(now())
+  respondedAt DateTime?
+
   community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
-  sender    User      @relation(fields: [senderId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+}
+
+enum ListingType {
+  FIXED
+  AUCTION
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  SOLD_OUT
+  CLOSED
+  REMOVED
+}
+
+enum OrderStatus {
+  PENDING
+  ADMIN_CONTACTED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum ListingCategory {
+  FURNITURE
+  ELECTRONICS
+  COMPUTING
+  GADGETS
+  FASHION
+  BEAUTY
+  HOME_APPLIANCES
+  TOOLS_EQUIPMENT
+  VEHICLES
+  REAL_ESTATE
+  BOOKS_MEDIA
+  GAMING
+  SPORTING_GOODS
+  SERVICES
+  FOOD_GROCERY
+  OTHER
+}
+
+enum ListingCondition {
+  NEW
+  FAIRLY_USED
+  USED
+}
+
+model Listing {
+  id          String            @id @default(cuid())
+  communityId String
+  creatorId   String
+  title       String
+  description String?
+  price       Float
+  currency    String            @default("NGN")
+  images      String[]
+  type        ListingType       @default(FIXED)
+  category    ListingCategory   @default(OTHER)
+  condition   ListingCondition  @default(NEW)
+  location    String?
+  status      ListingStatus     @default(ACTIVE)
+  stock       Int               @default(1)
+  soldOutAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  community Community          @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  creator   User                @relation(fields: [creatorId], references: [id])
+  bids      ListingBid[]
+  orderItems OrderItem[]
+  messages  CommunityMessage[]
+  favoritedBy ListingFavorite[]
+}
+
+model ListingFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+}
+
+model ListingBid {
+  id        String    @id @default(cuid())
+  listingId String
+  bidderId  String
+  amount    Float
+  status    BidStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bidder  User    @relation(fields: [bidderId], references: [id])
+}
+
+model StoreConversation {
+  id            String    @id @default(cuid())
+  buyerId       String
+  communityId   String
+  lastMessage   String?
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  buyer     User           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  community Community      @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  orders    Order[]
+  messages  OrderMessage[]
+
+  @@unique([buyerId, communityId])
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  conversationId    String?
+  buyerId           String
+  communityId       String
+  claimedByAdminId  String?
+  description       String?
+  status            OrderStatus @default(PENDING)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  conversation   StoreConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  buyer          User               @relation("OrderBuyer", fields: [buyerId], references: [id])
+  claimedByAdmin User?              @relation("OrderClaimedByAdmin", fields: [claimedByAdminId], references: [id])
+  community      Community          @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+  messages       OrderMessage[]
+  review         CommunityReview?
+}
+
+model CommunityReview {
+  id          String   @id @default(cuid())
+  reviewerId  String
+  communityId String
+  orderId     String   @unique
+  score       Float
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  reviewer  User      @relation(fields: [reviewerId], references: [id])
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  listingId String
+  quantity  Int    @default(1)
+  price     Float
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+}
+
+model OrderMessage {
+  id             String      @id @default(cuid())
+  conversationId String
+  senderId       String
+  orderId        String?
+  type           MessageType @default(TEXT)
+  content        String?
+  mediaUrl       String?
+  mediaSize      Int?
+  mediaDuration  Int?
+  fileName       String?
+  read           Boolean     @default(false)
+  deleted        Boolean     @default(false)
+  deletedAt      DateTime?
+  pinned         Boolean     @default(false)
+  pinnedAt       DateTime?
+  archived       Boolean     @default(false)
+  archivedAt     DateTime?
+  replyToId      String?
+  createdAt      DateTime    @default(now())
+
+  conversation StoreConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User              @relation(fields: [senderId], references: [id])
+  order        Order?            @relation(fields: [orderId], references: [id])
+  replyTo      OrderMessage?     @relation("OrderMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      OrderMessage[]    @relation("OrderMessageReply")
 }
 
 model DirectMessage {
@@ -557,11 +1079,20 @@ model DirectMessage {
   mediaDuration Int?
   fileName   String?
   read       Boolean     @default(false)
+  deleted    Boolean     @default(false)
+  deletedAt  DateTime?
+  pinned     Boolean     @default(false)
+  pinnedAt   DateTime?
+  archived   Boolean     @default(false)
+  archivedAt DateTime?
+  replyToId  String?
   createdAt  DateTime    @default(now())
 
   conversation  DMConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender   User @relation("DMSender", fields: [senderId], references: [id])
   receiver User @relation("DMReceiver", fields: [receiverId], references: [id])
+  replyTo  DirectMessage?  @relation("DirectMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies  DirectMessage[] @relation("DirectMessageReply")
 }
 
 

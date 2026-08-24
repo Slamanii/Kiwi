@@ -15,26 +15,59 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
                 where: { id: userId },
                 select: { roles: true }
             })
-        const allowed: UserRole[] = [UserRole.AGENT, UserRole.LAWYER, UserRole.DEVELOPER]            
+        const allowed: UserRole[] = [UserRole.AGENT, UserRole.DESIGNER, UserRole.DEVELOPER]            
         const hasRole = user?.roles.some((r: UserRole) => allowed.includes(r))
-            if (!hasRole) throw new Error('Only agents, lawyers and developers can post info')
+            if (!hasRole) throw new Error('Only agents, designers and developers can post info')
+
+        const incompleteThreadCount = await tx.thread.count({
+            where: {
+                OR: [{ clientId: userId }, { agentId: userId }],
+                status: { in: ['ACTIVE'] }
+            }
+        })
+
+        const limit = user.roles.includes('AGENT') ? 30 : 5
+            if (incompleteThreadCount >= limit) {
+                throw new Error(`You have ${incompleteThreadCount} active threads. Close some before posting a new seek.`)
         }
+    }
 
         const isInfoPost = data.type === SeekType.INFO
         const location = !isInfoPost && data.location ? formatLocation(data.location) : null
+
+     
 
         const created = await tx.seek.create({
     data: {
         authorId: userId,
         content: data.content,
         type: data.type,
+        city: isInfoPost ? '' : (data.city ?? ''),
         propertyType: isInfoPost ? null : (data.propertyType ?? null),
+        isShortlet: isInfoPost ? false : (data.isShortlet ?? false),
         budget: isInfoPost ? null : (data.budget ?? null),
+        currency: isInfoPost ? null : (data.currency ?? 'NGN'),
         location: isInfoPost ? null : location,
-        urgency: isInfoPost ? null : (data.urgency ?? null),
+        state: isInfoPost ? null : (data.state ?? null),
+        zone: isInfoPost ? null : (data.zone ?? null),
+        urgency: isInfoPost ? undefined : data.urgency,
         rooms: isInfoPost ? null : (data.rooms ?? null),
         isSingle: isInfoPost ? null : (data.isSingle ?? null),
         hasPets: isInfoPost ? null : (data.hasPets ?? null),
+        hasChildren: isInfoPost ? null : (data.hasChildren ?? null),
+        isStudent: isInfoPost ? null : (data.isStudent ?? null),
+        worksFromHome: isInfoPost ? null : (data.worksFromHome ?? null),
+        needsMortgage: isInfoPost ? null : (data.needsMortgage ?? null),
+        hasLegalRep: isInfoPost ? null : (data.hasLegalRep ?? null),
+        allowsSingle: isInfoPost ? null : (data.allowsSingle ?? null),
+        allowsPets: isInfoPost ? null : (data.allowsPets ?? null),
+        allowsChildren: isInfoPost ? null : (data.allowsChildren ?? null),
+        isFurnished: isInfoPost ? null : (data.isFurnished ?? null),
+        hasParking: isInfoPost ? null : (data.hasParking ?? null),
+        hasGenerator: isInfoPost ? null : (data.hasGenerator ?? null),
+        hasWater: isInfoPost ? null : (data.hasWater ?? null),
+        hasCofO: isInfoPost ? null : (data.hasCofO ?? null),
+        hasFlexiblePayment: isInfoPost ? null : (data.hasFlexiblePayment ?? null),
         expiresAt: isInfoPost ? null : (data.expiresAt ?? null),
     },
             include: {
@@ -43,12 +76,12 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
                         id: true,
                         name: true,
                         roles: true,
+                        verificationStatus: true,
                         profile: {
                             select: {
                                 avatarUrl: true,
                                 location: true,
                                 rating: true,
-                                verificationStatus: true,
                             }
                         },
                     }
@@ -56,15 +89,20 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
             }
         })
 
-        if (!isInfoPost) {
-            await tx.profile.update({
-                where: { userId },
-                data: { requests: { increment: 1 } }
-            })
-        }
+        await tx.profile.update({
+            where: { userId },
+            data: { requests: { increment: 1 } }
+        })
 
         return created
     })
+
+    seek.author = {
+        ...seek.author,
+        profile: seek.author.profile
+            ? { ...seek.author.profile, verificationStatus: seek.author.verificationStatus }
+            : seek.author.profile
+    }
 
     getIO().emit('seek:new', {
         id: seek.id,
@@ -75,15 +113,13 @@ export async function createSeek(userId: string, data: CreateSeekInput) {
         author: seek.author
     })
 
-     if (seek.type !== SeekType.INFO) {
-        const profile = await prisma.profile.findUnique({ where: { userId } })
-        getIO().to(`profile:${userId}`).emit('profile:statsUpdated', {
-            userId,
-            requests: profile?.requests,
-            ongoing: profile?.ongoing,
-            completedDeals: profile?.completedDeals,
-        })
-    }
+    const profile = await prisma.profile.findUnique({ where: { userId } })
+    getIO().to(`profile:${userId}`).emit('profile:statsUpdated', {
+        userId,
+        requests: profile?.requests,
+        ongoing: profile?.ongoing,
+        completedDeals: profile?.completedDeals,
+    })
 
     return seek
 }
@@ -100,12 +136,43 @@ export async function createReseek(userId: string, seekId: string, content: stri
         })
         if (existing) throw new Error('Already reseeked')
 
-        const reseek = await prisma.$transaction(async (tx: any) => {
+
+
+    const reseek = await prisma.$transaction(async (tx: any) => {
+             
+        if (originalSeek.type === SeekType.INFO) {
+            const user = await tx.user.findUnique({
+                where: { id: userId },
+                select: { roles: true }
+            })
+        const allowed: UserRole[] = [UserRole.AGENT, UserRole.DESIGNER, UserRole.DEVELOPER]            
+        const hasRole = user?.roles.some((r: UserRole) => allowed.includes(r))
+            if (!hasRole) throw new Error('Only agents, designers and developers can post info')
+
+        const incompleteThreadCount = await tx.thread.count({
+            where: {
+                OR: [{ clientId: userId }, { agentId: userId }],
+                status: { in: ['ACTIVE'] }
+            }
+        })
+
+        const limit = user.roles.includes('AGENT') ? 30 : 5
+            if (incompleteThreadCount >= limit) {
+                throw new Error(`You have ${incompleteThreadCount} active threads. Close some before posting a new seek.`)
+        }
+    }
+
+        const isInfoPost = originalSeek.type === SeekType.INFO
+        const location = !isInfoPost && originalSeek.location ? formatLocation(originalSeek.location) : null
+
             const created = await tx.seek.create({
                 data: {
                     authorId: userId,
                     content,
-                    type: originalSeek.propertyType,
+                    type: originalSeek.type,
+                    city: originalSeek.city,
+                    propertyType: originalSeek.propertyType,
+                    isShortlet: originalSeek.isShortlet,
                     budget: originalSeek.budget,
                     location: originalSeek.location,
                     urgency: originalSeek.urgency,
@@ -173,7 +240,9 @@ export async function createReseek(userId: string, seekId: string, content: stri
 export async function getSeekFeed(query: SeekFeedQuery) {
   const limit = query.limit ?? 20
 const where: Prisma.SeekWhereInput = {
-  status: { in: [SeekStatus.OPEN, SeekStatus.SELECTING] },
+  ...(query.authorId
+    ? { authorId: query.authorId }
+    : { status: { in: [SeekStatus.OPEN, SeekStatus.SELECTING] } }),
   ...(query.type && { type: query.type }),
   ...(query.propertyType && { propertyType: query.propertyType }),
   ...(query.location && { location: { startsWith: query.location } }),
@@ -258,7 +327,18 @@ export async function getSeekById(seekId: string) {
                             rating: true,
                             completedDeals: true,
                             reviewCount: true,
-                            comments: true,
+                        }
+                    }
+                }
+            },
+            originalSeek: {
+                include: {
+                    author: {
+                        select: {
+                            id: true,
+                            name: true,
+                            roles: true,
+                            profile: { select: { avatarUrl: true } }
                         }
                     }
                 }
@@ -293,6 +373,15 @@ export async function deleteSeek(seekId: string, userId: string) {
         ])
 }
 
+
+function mapComment(comment: any) {
+    const { user, replies, ...rest } = comment
+    return {
+        ...rest,
+        author: user,
+        replies: replies ? replies.map(mapComment) : [],
+    }
+}
 
 export async function addComment(seekId: string, userId: string, content: string, parentId?: string) {
 
@@ -336,9 +425,9 @@ export async function addComment(seekId: string, userId: string, content: string
                 return created
             })
 
-            getIO().to(`seek:${seekId}`).emit('seek:comment', { seekId, comment })
+            getIO().to(`seek:${seekId}`).emit('seek:comment', { seekId, comment: mapComment(comment) })
 
-                return comment
+                return mapComment(comment)
 }
 
 
@@ -346,8 +435,8 @@ export async function getComments(seekId: string) {
     const seek = await prisma.seek.findUnique({ where: { id: seekId } })
     if (!seek) throw new Error('Seek not found')
 
-        return prisma.seekComment.findMany({
-            where: { seekId, parentId: null },
+        const comments = await prisma.seekComment.findMany({
+            where: { seekId, parentId: { equals: null } },
             orderBy: {  createdAt: 'desc' },
             include: {
                 user: {
@@ -357,22 +446,24 @@ export async function getComments(seekId: string) {
                         profile: {
                             select: { avatarUrl: true }
                         }
-                    },
-                    replies: {
-                        orderBy: { createdAt: 'asc' },
-                        include: {
-                            author: {
-                                select: {
-                                    id: true,
-                                    name: true,
-                                    profile: { select: { avatarUrl: true } }
-                                }
+                    }
+                },
+                replies: {
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                profile: { select: { avatarUrl: true } }
                             }
                         }
                     }
                 }
             }
         })
+
+        return comments.map(mapComment)
 }
 
 
