@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env app.ts",
     "build": "tsc",
-    "start": "node --env-file=../../.env dist/app.js",
+    "start": "tsx --env-file=../../.env app.ts",
     "bootstrap-admin": "tsx --env-file=../../.env scripts/bootstrapAdmin.ts"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
     "express": "^4",
     "firebase-admin": "^13.10.0",
     "jsonwebtoken": "^9",
+    "tsx": "^4",
     "ws": "^8.21.1",
     "zod": "^3"
   },
@@ -25,7 +26,6 @@
     "@types/express": "^4",
     "@types/jsonwebtoken": "^9",
     "@types/ws": "^8.18.1",
-    "tsx": "^4",
     "typescript": "^5"
   }
 }

@@ -96,6 +96,9 @@ importers:
       jsonwebtoken:
         specifier: ^9
         version: 9.0.3
+      tsx:
+        specifier: ^4
+        version: 4.23.12
       ws:
         specifier: ^8.21.1
         version: 8.21.3
@@ -115,9 +118,6 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
-      tsx:
-        specifier: ^4
-        version: 4.23.12
       typescript:
         specifier: ^5
         version: 5.9.3
