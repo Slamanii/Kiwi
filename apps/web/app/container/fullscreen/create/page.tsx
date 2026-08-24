@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import api from '@/lib/api'
@@ -111,6 +111,14 @@ function amountLabel(type: SeekType | null) {
 
 
 export default function CreatePostPage() {
+    return (
+        <Suspense fallback={null}>
+            <CreatePostPageInner />
+        </Suspense>
+    )
+}
+
+function CreatePostPageInner() {
     const router       = useRouter()
     const searchParams = useSearchParams()
     const { user }     = useAuth()
