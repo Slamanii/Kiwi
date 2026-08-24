@@ -1,10 +1,7 @@
 {
   "name": "kiwi",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@10.18.3",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",

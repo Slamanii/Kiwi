@@ -8,7 +8,8 @@ import PollMessageBubble from '@/components/community/PollMessageBubble'
 import ListingMessageBubble from '@/components/community/ListingMessageBubble'
 import { OrderCard } from '@/components/community/OrderCard'
 import ParticipantHeader from './ParticipantHeader'
-import ActionSheet, { ActionSheetItem } from './ActionSheet'
+import { ActionSheetItem } from './ActionSheet'
+import MessageActionMenu from './MessageActionMenu'
 import { useCall } from '@/context/CallContext'
 import { usePresence, formatLastSeen } from '@/hooks/usePresence'
 import { useTypingEmitter, usePeerTyping } from '@/hooks/useTyping'
@@ -107,6 +108,7 @@ export default function ConversationView({
     const [replyTarget, setReplyTarget] = useState<Message | null>(null)
     const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null)
     const [actionMessage, setActionMessage] = useState<Message | null>(null)
+    const [actionAnchor, setActionAnchor] = useState<{ top: number; bottom: number; left: number; right: number } | null>(null)
 
     const headerSubtitle = (isCommunity || isOrder)
         ? header.subtitle
@@ -225,39 +227,44 @@ export default function ConversationView({
 
     function buildActionItems(m: Message): ActionSheetItem[] {
         const items: ActionSheetItem[] = [
-            { key: 'reply', label: 'Reply', icon: <ReplyIcon className="w-5 h-5" />, onSelect: () => setReplyTarget(m) },
+            { key: 'reply', label: 'Reply', icon: <ReplyIcon className="w-4 h-4" />, onSelect: () => setReplyTarget(m) },
         ]
         if (m.content) {
-            items.push({ key: 'copy', label: 'Copy', icon: <CopyIcon className="w-5 h-5" />, onSelect: () => { navigator.clipboard.writeText(m.content ?? '') } })
+            items.push({ key: 'copy', label: 'Copy', icon: <CopyIcon className="w-4 h-4" />, onSelect: () => { navigator.clipboard.writeText(m.content ?? '') } })
         }
         items.push({
             key: 'pin',
             label: m.pinned ? 'Unpin' : 'Pin',
-            icon: <PinIcon className="w-5 h-5" filled={m.pinned} />,
+            icon: <PinIcon className="w-4 h-4" filled={m.pinned} />,
             onSelect: () => togglePinned(m),
         })
         items.push({
             key: 'archive',
             label: m.archived ? 'Unarchive' : 'Archive',
-            icon: <ArchiveIcon className="w-5 h-5" filled={m.archived} />,
+            icon: <ArchiveIcon className="w-4 h-4" filled={m.archived} />,
             onSelect: () => toggleArchived(m),
         })
         items.push({
             key: 'select',
             label: 'Select',
-            icon: <SelectIcon className="w-5 h-5" />,
+            icon: <SelectIcon className="w-4 h-4" />,
             onSelect: () => { setSelectionMode(true); setSelectedIds(new Set([m.id])) },
         })
         if (m.senderId === currentUserId || canModerate) {
             items.push({
                 key: 'delete',
                 label: 'Delete',
-                icon: <TrashIcon className="w-5 h-5" />,
+                icon: <TrashIcon className="w-4 h-4" />,
                 destructive: true,
                 onSelect: () => deleteOne(m),
             })
         }
         return items
+    }
+
+    function closeActionMenu() {
+        setActionMessage(null)
+        setActionAnchor(null)
     }
 
     return (
@@ -325,7 +332,7 @@ export default function ConversationView({
                                             selectionMode={selectionMode}
                                             isSelected={selectedIds.has(m.id)}
                                             onToggleSelect={() => toggleSelected(m.id)}
-                                            onLongPress={() => setActionMessage(m)}
+                                            onLongPress={rect => { setActionMessage(m); setActionAnchor(rect) }}
                                             onSwipeReply={() => setReplyTarget(m)}
                                         >
                                             {m.replyTo && (
@@ -416,9 +423,11 @@ export default function ConversationView({
                 )}
             </div>
 
-            <ActionSheet
+            <MessageActionMenu
                 open={!!actionMessage}
-                onClose={() => setActionMessage(null)}
+                anchorRect={actionAnchor}
+                align={actionMessage?.senderId === currentUserId ? 'right' : 'left'}
+                onClose={closeActionMenu}
                 items={actionMessage ? buildActionItems(actionMessage) : []}
             />
 
@@ -440,11 +449,15 @@ function MessageRow({
     selectionMode: boolean
     isSelected: boolean
     onToggleSelect: () => void
-    onLongPress: () => void
+    onLongPress: (rect: DOMRect) => void
     onSwipeReply: () => void
     children: React.ReactNode
 }) {
-    const longPress = useLongPress(onLongPress)
+    const rowRef = useRef<HTMLDivElement>(null)
+    const longPress = useLongPress(() => {
+        const rect = rowRef.current?.getBoundingClientRect()
+        if (rect) onLongPress(rect)
+    })
     const { offset, handlers: swipeHandlers } = useSwipeToReply(onSwipeReply, selectionMode)
 
     // Both hooks define onTouchStart/Move/End/Cancel — spreading one after the
@@ -469,6 +482,7 @@ function MessageRow({
                 </button>
             )}
             <div
+                ref={rowRef}
                 className="flex-1 min-w-0"
                 onClick={selectionMode ? onToggleSelect : undefined}
                 style={{ transform: `translateX(${offset}px)`, transition: offset === 0 ? 'transform 150ms ease-out' : undefined }}

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env app.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node --env-file=../../.env dist/app.js",
     "bootstrap-admin": "tsx --env-file=../../.env scripts/bootstrapAdmin.ts"
   },
   "dependencies": {
