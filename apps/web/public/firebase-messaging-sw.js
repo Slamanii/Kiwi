@@ -12,13 +12,23 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
-messaging.onBackgroundMessage((payload) => {
-    const { title, body } = payload.notification
+self.addEventListener('push', (event) => {
+    console.log('[SW] raw push event received', event.data ? event.data.text() : '(no data)')
+})
 
-    self.registration.showNotification(title, {
+messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] onBackgroundMessage fired', payload)
+
+    const { title, body } = payload.notification ?? {}
+
+    self.registration.showNotification(title ?? 'Kasa', {
         body,
         icon: '/icons/icon-192.png',
         data: payload.data,
+    }).then(() => {
+        console.log('[SW] showNotification resolved')
+    }).catch((err) => {
+        console.error('[SW] showNotification failed', err)
     })
 })
 

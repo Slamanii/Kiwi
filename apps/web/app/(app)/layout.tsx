@@ -11,7 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const isFullscreen = FULLSCREEN_ROUTES.some(pattern => pattern.test(pathname))
 
     return (
-        <div className="relative h-dvh flex flex-col">
+        <div className="relative h-dvh flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
             <PushNotificationManager />
             <main id="main-scroll" className={`flex-1 ${isFullscreen ? 'overflow-hidden' : 'overflow-y-auto pb-24'}`}>
                 {children}
