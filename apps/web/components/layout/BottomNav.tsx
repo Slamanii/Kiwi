@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useScrollDirection } from '@/hooks/useScrollDirection'
 import { useAuth } from '@/context/AuthContext'
+import { useChatUnread } from '@/context/ChatUnreadContext'
 import { useState } from 'react'
 import { HomeIcon, ExploreIcon, ChatIcon, ProfileIcon } from '@/components/ui/Icons'
 
@@ -48,6 +49,7 @@ function getArcPositions(count: number) {
         const router = useRouter()
         const hidden = useScrollDirection()
         const { user } = useAuth()
+        const { unreadCount } = useChatUnread()
         const [open, setopen] = useState(false)
         const [unauth, setUnauth] = useState(false)
 
@@ -95,10 +97,17 @@ function getArcPositions(count: number) {
                                     <Link
                                         key={tab.href}
                                         href={tab.href}
-                                        className={`flex-1 min-w-0 h-full flex flex-col items-center justify-center gap-0 rounded-2xl transition-colors
+                                        className={`relative flex-1 min-w-0 h-full flex flex-col items-center justify-center gap-0 rounded-2xl transition-colors
                                             ${active ? 'text-blue-500' : 'text-gray-400'}`}
                                     >
-                                        <tab.Icon className="w-[18px] h-[18px]" filled={active} />
+                                        <span className="relative">
+                                            <tab.Icon className="w-[18px] h-[18px]" filled={active} />
+                                            {tab.href === '/chat' && unreadCount > 0 && (
+                                                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-semibold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-1 leading-none">
+                                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                                </span>
+                                            )}
+                                        </span>
                                         <span className={`h-0.5 w-[35%] rounded-full transition-colors duration-300 my-0.5
                                             ${active ? 'bg-blue-500' : 'bg-transparent'}`} />
                                         <span className="text-[9px] leading-none font-medium truncate max-w-full">{tab.label}</span>

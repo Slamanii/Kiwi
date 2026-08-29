@@ -344,6 +344,19 @@ export async function getOrderConversationMessages(conversationId: string, userI
     }
 }
 
+export async function markOrderConversationRead(conversationId: string, userId: string) {
+    const conversation = await prisma.storeConversation.findUnique({ where: { id: conversationId } })
+    if (!conversation) throw new Error('Conversation not found')
+
+    const isBuyer = conversation.buyerId === userId
+    if (!isBuyer) await assertAdmin(conversation.communityId, userId)
+
+    await prisma.orderMessage.updateMany({
+        where: { conversationId, senderId: { not: userId }, read: false },
+        data: { read: true }
+    })
+}
+
 // Buyer's free-form reply inside an already-open conversation. There is deliberately no
 // buyer-facing "start conversation" path - existence of a conversationId (only ever created
 // inside followUpOnOrder) is what gates this, mirroring the "admin must DM first" rule.

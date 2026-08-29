@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSocket } from '@/context/SocketContext'
+import { useChatUnread } from '@/context/ChatUnreadContext'
 import { orderApi } from '@/lib/api/order'
 import type { Message, StoreConversation } from '@/types'
 
@@ -34,6 +35,7 @@ export function useOrderConversation(conversationId: string) {
     const [loadingMore,  setLoadingMore]  = useState(false)
     const [sending,      setSending]      = useState(false)
     const socket = useSocket()
+    const { refreshUnreadCount } = useChatUnread()
 
     useEffect(() => {
         if (!conversationId) return
@@ -47,7 +49,8 @@ export function useOrderConversation(conversationId: string) {
             })
             .catch(console.error)
             .finally(() => setLoading(false))
-    }, [conversationId])
+        orderApi.markRead(conversationId).then(refreshUnreadCount).catch(console.error)
+    }, [conversationId, refreshUnreadCount])
 
     const loadMore = useCallback(async () => {
         if (!hasMore || loadingMore || !cursor) return
@@ -86,6 +89,7 @@ export function useOrderConversation(conversationId: string) {
         const onMessage = (message: Message) => {
             if (message.conversationId !== conversationId) return
             setMessages(prev => appendUnique(prev, message))
+            orderApi.markRead(conversationId).then(refreshUnreadCount).catch(console.error)
         }
         const onDeleted = (payload: MessageDeletedPayload) => {
             if (payload.conversationType !== 'ORDER' || payload.conversationId !== conversationId) return
@@ -111,7 +115,7 @@ export function useOrderConversation(conversationId: string) {
             socket.off('message:unpinned', onPinned)
             socket.off('message:archived', onArchived)
         }
-    }, [socket, conversationId])
+    }, [socket, conversationId, refreshUnreadCount])
 
     return { conversation, messages, loading, loadingMore, hasMore, loadMore, sendMessage, sending }
 }

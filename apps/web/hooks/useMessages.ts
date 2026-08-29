@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSocket } from '@/context/SocketContext'
+import { useChatUnread } from '@/context/ChatUnreadContext'
 import { messageApi } from '@/lib/api/message'
 import type { Message } from '@/types'
 
@@ -33,6 +34,7 @@ export function useMessages(threadId: string) {
     const [loadingMore, setLoadingMore] = useState(false)
     const [sending,     setSending]     = useState(false)
     const socket = useSocket()
+    const { refreshUnreadCount } = useChatUnread()
 
     useEffect(() => {
         if (!threadId) return
@@ -45,7 +47,8 @@ export function useMessages(threadId: string) {
             })
             .catch(console.error)
             .finally(() => setLoading(false))
-    }, [threadId])
+        messageApi.markRead(threadId).then(refreshUnreadCount).catch(console.error)
+    }, [threadId, refreshUnreadCount])
 
     const loadMore = useCallback(async () => {
         if (!hasMore || loadingMore || !cursor) return
@@ -78,6 +81,7 @@ export function useMessages(threadId: string) {
         const onMessage = (message: Message) => {
             if (message.threadId !== threadId) return
             setMessages(prev => appendUnique(prev, message))
+            messageApi.markRead(threadId).then(refreshUnreadCount).catch(console.error)
         }
         const onDeleted = (payload: MessageDeletedPayload) => {
             if (payload.conversationType !== 'THREAD' || payload.conversationId !== threadId) return
@@ -103,7 +107,7 @@ export function useMessages(threadId: string) {
             socket.off('message:unpinned', onPinned)
             socket.off('message:archived', onArchived)
         }
-    }, [socket, threadId])
+    }, [socket, threadId, refreshUnreadCount])
 
     return { messages, loading, loadingMore, hasMore, loadMore, sendMessage, sending }
 }
@@ -117,6 +121,7 @@ export function useDMMessages(userId: string) {
     const [loadingMore,    setLoadingMore]    = useState(false)
     const [sending,        setSending]        = useState(false)
     const socket = useSocket()
+    const { refreshUnreadCount } = useChatUnread()
 
     useEffect(() => {
         if (!userId) return
@@ -127,10 +132,13 @@ export function useDMMessages(userId: string) {
                 setConversationId(res.data.conversationId ?? null)
                 setCursor(res.data.nextCursor ?? null)
                 setHasMore(!!res.data.nextCursor)
+                if (res.data.conversationId) {
+                    messageApi.markDMRead(res.data.conversationId).then(refreshUnreadCount).catch(console.error)
+                }
             })
             .catch(console.error)
             .finally(() => setLoading(false))
-    }, [userId])
+    }, [userId, refreshUnreadCount])
 
     const loadMore = useCallback(async () => {
         if (!hasMore || loadingMore || !cursor) return
@@ -170,6 +178,7 @@ export function useDMMessages(userId: string) {
         const onMessage = (message: Message & { conversationId?: string }) => {
             if (!conversationId || message.conversationId !== conversationId) return
             setMessages(prev => appendUnique(prev, message))
+            messageApi.markDMRead(conversationId).then(refreshUnreadCount).catch(console.error)
         }
         const onDeleted = (payload: MessageDeletedPayload) => {
             if (payload.conversationType !== 'DM' || payload.conversationId !== conversationId) return
@@ -195,7 +204,7 @@ export function useDMMessages(userId: string) {
             socket.off('message:unpinned', onPinned)
             socket.off('message:archived', onArchived)
         }
-    }, [socket, conversationId])
+    }, [socket, conversationId, refreshUnreadCount])
 
     return { messages, loading, loadingMore, hasMore, loadMore, sendMessage, sending, conversationId }
 }

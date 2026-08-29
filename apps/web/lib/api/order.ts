@@ -25,4 +25,6 @@ export const orderApi = {
         api.get(`/orders/conversation/${conversationId}`, { params: { cursor } }),
     sendConversationMessage: (conversationId: string, content: string, replyToId?: string) =>
         api.post(`/orders/conversation/${conversationId}`, { content, replyToId }),
+    markRead: (conversationId: string) =>
+        api.patch(`/orders/conversation/${conversationId}/read`),
 }

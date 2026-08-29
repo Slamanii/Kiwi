@@ -14,6 +14,7 @@ import {
   getCommunityStoreConversations,
   getOrderConversationMessages,
   sendOrderMessage,
+  markOrderConversationRead,
 } from '../services/order.js'
 
 const router = Router()
@@ -174,6 +175,17 @@ router.get('/conversation/:id', requireAuth, async (req: Request, res: Response)
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined
     const result = await getOrderConversationMessages(req.params.id, userId, cursor)
     return res.status(200).json(result)
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+// mark a store conversation as read (buyer or store admin only)
+router.patch('/conversation/:id/read', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId as string
+    await markOrderConversationRead(req.params.id, userId)
+    return res.status(200).json({ message: 'Messages marked as read' })
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
   }
