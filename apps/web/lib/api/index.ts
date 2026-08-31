@@ -21,6 +21,16 @@ api.interceptors.response.use(
     (res) => res,
     async (error) => {
         const original = error.config
+        const isRefreshCall = original?.url?.includes('auth/refresh')
+
+        if (error.response?.status === 401 && isRefreshCall) {
+            localStorage.clear()
+            document.cookie = 'accessToken=; path=/; max-age=0'
+            document.cookie = 'refreshToken=; path=/; max-age=0'
+            window.location.href = '/login'
+            return Promise.reject(error)
+        }
+
         if (error.response?.status === 401 && !original._retry) {
             original._retry = true
             try {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/api/admin'
+import { STATUS_STYLES } from '@/lib/adminStatus'
 
 type Application = {
     id: string
@@ -72,7 +73,7 @@ export default function AdminApplicationsPage() {
                         key={tab}
                         onClick={() => setStatus(tab)}
                         className={`px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                            status === tab ? 'bg-white text-black' : 'text-white/60 hover:text-white'
+                            status === tab ? STATUS_STYLES[tab].tabActive : 'text-white/60 hover:text-white'
                         }`}
                     >
                         {tab[0] + tab.slice(1).toLowerCase()}
@@ -88,14 +89,19 @@ export default function AdminApplicationsPage() {
                 <div className="space-y-3">
                     {applications.map(app => (
                         <div key={app.id} className="bg-white/5 rounded-2xl p-5 flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">{app.user.name}</p>
-                                    <p className="text-white/40 text-xs">{app.user.email}</p>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-medium truncate">{app.user.name}</p>
+                                    <p className="text-white/40 text-xs truncate">{app.user.email}</p>
                                 </div>
-                                <p className="text-white/40 text-xs">
-                                    {new Date(app.createdAt).toLocaleDateString()}
-                                </p>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_STYLES[app.status].badge}`}>
+                                        {app.status[0] + app.status.slice(1).toLowerCase()}
+                                    </span>
+                                    <p className="text-white/40 text-xs whitespace-nowrap">
+                                        {new Date(app.createdAt).toLocaleDateString()}
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-white/70">
@@ -123,16 +129,16 @@ export default function AdminApplicationsPage() {
                                     <button
                                         onClick={() => handleApprove(app.id)}
                                         disabled={busyId === app.id}
-                                        className="flex-1 py-2.5 rounded-full bg-blue-500 text-sm font-medium disabled:opacity-40"
+                                        className="flex-1 py-2.5 rounded-full bg-emerald-500 text-sm font-medium disabled:opacity-40"
                                     >
-                                        Approve
+                                        {busyId === app.id ? 'Approving...' : 'Approve'}
                                     </button>
                                     <button
                                         onClick={() => handleReject(app.id)}
                                         disabled={busyId === app.id}
-                                        className="flex-1 py-2.5 rounded-full border border-red-500/30 text-red-400 text-sm font-medium disabled:opacity-40"
+                                        className="flex-1 py-2.5 rounded-full border border-red-500/30 text-red-400 text-sm font-medium disabled:opacity-40 hover:bg-red-500/10"
                                     >
-                                        Reject
+                                        {busyId === app.id ? 'Rejecting...' : 'Reject'}
                                     </button>
                                 </div>
                             )}

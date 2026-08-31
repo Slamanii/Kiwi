@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/api/admin'
+import { STATUS_STYLES } from '@/lib/adminStatus'
 
 type VerificationRequest = {
     id: string
@@ -71,7 +72,7 @@ export default function AdminVerificationsPage() {
                         key={tab}
                         onClick={() => setStatus(tab)}
                         className={`px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                            status === tab ? 'bg-white text-black' : 'text-white/60 hover:text-white'
+                            status === tab ? STATUS_STYLES[tab].tabActive : 'text-white/60 hover:text-white'
                         }`}
                     >
                         {tab[0] + tab.slice(1).toLowerCase()}
@@ -87,14 +88,19 @@ export default function AdminVerificationsPage() {
                 <div className="space-y-3">
                     {requests.map(reqItem => (
                         <div key={reqItem.id} className="bg-white/5 rounded-2xl p-5 flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">{reqItem.user.name}</p>
-                                    <p className="text-white/40 text-xs">{reqItem.user.email}</p>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-medium truncate">{reqItem.user.name}</p>
+                                    <p className="text-white/40 text-xs truncate">{reqItem.user.email}</p>
                                 </div>
-                                <p className="text-white/40 text-xs">
-                                    {new Date(reqItem.createdAt).toLocaleDateString()}
-                                </p>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${STATUS_STYLES[reqItem.status].badge}`}>
+                                        {reqItem.status[0] + reqItem.status.slice(1).toLowerCase()}
+                                    </span>
+                                    <p className="text-white/40 text-xs whitespace-nowrap">
+                                        {new Date(reqItem.createdAt).toLocaleDateString()}
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-white/70">
@@ -130,16 +136,16 @@ export default function AdminVerificationsPage() {
                                     <button
                                         onClick={() => handleApprove(reqItem.id)}
                                         disabled={busyId === reqItem.id}
-                                        className="flex-1 py-2.5 rounded-full bg-blue-500 text-sm font-medium disabled:opacity-40"
+                                        className="flex-1 py-2.5 rounded-full bg-emerald-500 text-sm font-medium disabled:opacity-40"
                                     >
-                                        Approve
+                                        {busyId === reqItem.id ? 'Approving...' : 'Approve'}
                                     </button>
                                     <button
                                         onClick={() => handleReject(reqItem.id)}
                                         disabled={busyId === reqItem.id}
-                                        className="flex-1 py-2.5 rounded-full border border-red-500/30 text-red-400 text-sm font-medium disabled:opacity-40"
+                                        className="flex-1 py-2.5 rounded-full border border-red-500/30 text-red-400 text-sm font-medium disabled:opacity-40 hover:bg-red-500/10"
                                     >
-                                        Reject
+                                        {busyId === reqItem.id ? 'Rejecting...' : 'Reject'}
                                     </button>
                                 </div>
                             )}

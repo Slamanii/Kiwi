@@ -66,27 +66,33 @@ export default function AdminManageAdminsPage() {
                 {results.map(user => {
                     const isAdmin = user.roles.includes('ADMIN')
                     return (
-                        <div key={user.id} className="bg-white/5 rounded-2xl p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-white/10 overflow-hidden flex items-center justify-center text-xs">
+                        <div key={user.id} className="bg-white/5 rounded-2xl p-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-9 h-9 rounded-full bg-white/10 overflow-hidden flex items-center justify-center text-xs shrink-0">
                                     {user.avatarUrl ? (
                                         <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                         user.name[0]
                                     )}
                                 </div>
-                                <div>
-                                    <p className="text-sm font-medium">{user.name}</p>
-                                    <p className="text-white/40 text-xs">{user.roles.join(', ')}</p>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">{user.name}</p>
+                                    <p className="text-white/40 text-xs truncate">{user.roles.join(', ')}</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => handlePromote(user.id)}
-                                disabled={isAdmin || busyId === user.id}
-                                className="px-4 py-2 rounded-full bg-blue-500 text-sm font-medium disabled:opacity-40"
-                            >
-                                {isAdmin ? 'Admin' : 'Promote'}
-                            </button>
+                            {isAdmin ? (
+                                <span className="shrink-0 px-4 py-2 rounded-full bg-emerald-400/15 text-emerald-300 border border-emerald-400/30 text-sm font-medium">
+                                    Admin
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={() => handlePromote(user.id)}
+                                    disabled={busyId === user.id}
+                                    className="shrink-0 px-4 py-2 rounded-full bg-blue-500 text-sm font-medium disabled:opacity-40"
+                                >
+                                    {busyId === user.id ? 'Promoting...' : 'Promote'}
+                                </button>
+                            )}
                         </div>
                     )
                 })}

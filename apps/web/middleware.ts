@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const GATED_PREFIXES = ['/explore', '/profile', '/chat']
+const GATED_PREFIXES = ['/explore', '/profile', '/chat', '/admin']
 
 export function middleware(req: NextRequest) {
     const token = req.cookies.get('accessToken')?.value
