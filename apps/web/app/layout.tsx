@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { SocketProvider } from '@/context/SocketContext'
 import { CallProvider } from '@/context/CallContext'
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
+import { AuthSocketSync } from '@/components/AuthSocketSync'
 import CallOverlay from '@/components/chat/CallOverlay'
 import './globals.css'
 
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode}) {
                 <ServiceWorkerRegistration />
                 <AuthProvider>
                     <SocketProvider>
+                        <AuthSocketSync />
                         <CallProvider>
                             {children}
                             <CallOverlay />

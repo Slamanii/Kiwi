@@ -49,3 +49,9 @@ body {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 .animate-fade-in { animation: fade-in 0.2s ease forwards; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot { animation: typing-bounce 1.1s ease-in-out infinite; }

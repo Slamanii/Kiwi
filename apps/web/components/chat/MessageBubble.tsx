@@ -1,4 +1,5 @@
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 type MessageBubbleProps = {
     content: string
@@ -6,6 +7,7 @@ type MessageBubbleProps = {
     timestamp: string
     senderName?: string
     senderAvatarUrl?: string | null
+    senderVerified?: boolean
 }
 
 export default function MessageBubble({
@@ -14,6 +16,7 @@ export default function MessageBubble({
     timestamp,
     senderName,
     senderAvatarUrl,
+    senderVerified,
 }: MessageBubbleProps) {
     const showSenderInfo = !!senderName && !isSent
 
@@ -26,7 +29,10 @@ export default function MessageBubble({
             )}
             <div className="max-w-[70%]">
                 {showSenderInfo && (
-                    <div className="text-white/40 text-[11px] mb-1 pl-1">{senderName}</div>
+                    <div className="flex items-center gap-1 text-white/40 text-[11px] mb-1 pl-1">
+                        {senderName}
+                        {senderVerified && <VerifiedBadge size="xs" />}
+                    </div>
                 )}
                 <div
                     className={`px-3.5 py-2.5 text-sm leading-relaxed ${

@@ -2,6 +2,7 @@
 import { formatTime } from '@/lib/utils'
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 
 export type Reply = {
@@ -12,7 +13,7 @@ export type Reply = {
     author: {
         id: string
         name: string
-        profile?: { avatarUrl?: string }
+        profile?: { avatarUrl?: string; verificationStatus?: string }
     }
 }
 
@@ -32,7 +33,7 @@ export type Comment = {
     author: {
         id: string
         name: string
-        profile?: { avatarUrl?: string }
+        profile?: { avatarUrl?: string; verificationStatus?: string }
     }
     replies: Reply[]
 }
@@ -183,6 +184,9 @@ export function CommentCard({
                         <span className="text-xs font-semibold text-white">
                             {comment.author.name}
                         </span>
+                        {comment.author.profile?.verificationStatus === 'VERIFIED' && (
+                            <VerifiedBadge size="xs" />
+                        )}
                         <span className="text-xs text-gray-500">
                             {formatTime(comment.createdAt)}
                         </span>
@@ -281,6 +285,9 @@ export function ReplyCard({ reply, onLike, liked }: ReplyCardProps) {
                     <span className="text-xs font-semibold text-white">
                         {reply.author.name}
                     </span>
+                    {reply.author.profile?.verificationStatus === 'VERIFIED' && (
+                        <VerifiedBadge size="xs" />
+                    )}
                     <span className="text-xs text-gray-500">
                         {formatTime(reply.createdAt)}
                     </span>

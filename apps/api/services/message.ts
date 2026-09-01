@@ -4,6 +4,11 @@ import { getIO } from '../utils/socket.js'
 import { notify } from './notification.js'
 import { isBlocked } from './conversation.js'
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function sendMessage(
     threadId: string,
     senderId: string,
@@ -53,6 +58,7 @@ export async function sendMessage(
                         select: {
                             id: true,
                             name: true,
+                            verificationStatus: true,
                             profile: { select: { avatarUrl: true } }
                         }
                     },
@@ -64,18 +70,20 @@ export async function sendMessage(
             where: { id: threadId },
             data: { updatedAt: new Date() }
         })
-        getIO().to(`thread:${threadId}`).emit(`message:new`, message)
+
+        const result = { ...message, sender: mergeVerification(message.sender) }
+        getIO().to(`thread:${threadId}`).emit(`message:new`, result)
 
         const receiverId = senderId === thread.clientId ? thread.agentId : thread.clientId
         await notify({
             userId: receiverId,
             type: NotificationType.NEW_MESSAGE,
-            title: 'New Message',
+            title: message.sender.name,
             body: data.content ?? 'Sent an attachment',
             metadata: { threadId }
         })
 
-        return message
+        return result
 }
 
 export async function sendDM(
@@ -128,6 +136,7 @@ export async function sendDM(
         select: {
           id: true,
           name: true,
+          verificationStatus: true,
           profile: { select: { avatarUrl: true } }
         }
       },
@@ -135,18 +144,20 @@ export async function sendDM(
     }
   })
 
+  const result = { ...message, sender: mergeVerification(message.sender) }
+
   // emit to DM conversation room
-  getIO().to(`dm:${conversation.id}`).emit('message:new', message)
+  getIO().to(`dm:${conversation.id}`).emit('message:new', result)
 
   await notify({
     userId: receiverId,
     type: NotificationType.NEW_MESSAGE,
-    title: 'New message',
+    title: message.sender.name,
     body: data.content ?? 'Sent an attachment',
     metadata: { conversationId: conversation.id }
   })
 
-  return message
+  return result
 }
 
 
@@ -186,6 +197,7 @@ export async function getThreadMessages(threadId: string, userId: string, cursor
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             },
@@ -197,7 +209,7 @@ export async function getThreadMessages(threadId: string, userId: string, cursor
     if (hasMore) messages.pop()
 
     return {
-        messages,
+        messages: messages.map(m => ({ ...m, sender: mergeVerification(m.sender) })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -226,6 +238,7 @@ export async function getDMMessages(userId: string, otherUserId: string, cursor?
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             },
@@ -238,7 +251,7 @@ export async function getDMMessages(userId: string, otherUserId: string, cursor?
 
     return {
         conversationId: conversation.id,
-        messages,
+        messages: messages.map(m => ({ ...m, sender: mergeVerification(m.sender) })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -257,7 +270,7 @@ export async function getDMConversations(userId: string) {
         const [otherUser, unreadCount] = await Promise.all([
             prisma.user.findUnique({
                 where: { id: otherUserId },
-                select: { id: true, name: true, profile: { select: { avatarUrl: true } } }
+                select: { id: true, name: true, verificationStatus: true, profile: { select: { avatarUrl: true } } }
             }),
             prisma.directMessage.count({
                 where: { conversationId: conversation.id, receiverId: userId, read: false }
@@ -266,7 +279,7 @@ export async function getDMConversations(userId: string) {
 
         return {
             id: conversation.id,
-            otherUser,
+            otherUser: otherUser ? mergeVerification(otherUser) : otherUser,
             lastMessage: conversation.lastMessage,
             lastMessageAt: conversation.lastMessageAt,
             unreadCount,
@@ -306,6 +319,7 @@ export async function getCommunityMessages(communityId: string, userId: string, 
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             },
@@ -319,7 +333,7 @@ export async function getCommunityMessages(communityId: string, userId: string, 
     if (hasMore) messages.pop()
 
     return {
-        messages,
+        messages: messages.map(m => ({ ...m, sender: mergeVerification(m.sender) })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -361,7 +375,7 @@ export async function sendCommunityMessage(
         }),
         prisma.community.findUnique({
             where: { id: communityId },
-            select: { messagingMode: true }
+            select: { name: true, messagingMode: true }
         })
     ])
 
@@ -393,6 +407,7 @@ export async function sendCommunityMessage(
                     select: {
                         id: true,
                         name: true,
+                        verificationStatus: true,
                         profile: { select: { avatarUrl: true } }
                     }
                 },
@@ -408,10 +423,23 @@ export async function sendCommunityMessage(
             }
         })
 
-        return created
+        return { ...created, sender: mergeVerification(created.sender) }
     })
 
     getIO().to(`community:${communityId}`).emit('message:new', message)
+
+    const members = await prisma.communityMember.findMany({
+        where: { communityId, userId: { not: senderId } },
+        select: { userId: true }
+    })
+    const notifyBody = data.content ?? 'Sent an attachment'
+    await Promise.all(members.map(member => notify({
+        userId: member.userId,
+        type: NotificationType.NEW_MESSAGE,
+        title: community.name,
+        body: `${message.sender.name}: ${notifyBody}`,
+        metadata: { communityId }
+    })))
 
     return message
 }

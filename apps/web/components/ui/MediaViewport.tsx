@@ -2,19 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { MediaItem } from '@/types'
-import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { ChevronLeftIcon, MoreIcon, ShareIcon, EditIcon, TrashIcon } from '@/components/ui/Icons'
+import ActionSheet, { ActionSheetItem } from '@/components/chat/ActionSheet'
 
 type MediaViewportProps = {
     items: MediaItem[]
     initialIndex?: number
     onClose: () => void
+    /** Any of these being present shows a 3-dot menu button for the item currently in view. */
+    onShare?: (item: MediaItem, index: number) => void
+    onEdit?: (item: MediaItem, index: number) => void
+    /** Confirmed via a browser prompt before firing — caller doesn't need to confirm again. */
+    onDelete?: (item: MediaItem, index: number) => void
 }
 
 // Full-screen media viewer shared across the app (bids, listings, catalog, posts, ...) —
 // any component that has a MediaItem[] can hand it off here instead of building its own viewer.
-export function MediaViewport({ items, initialIndex = 0, onClose }: MediaViewportProps) {
+export function MediaViewport({ items, initialIndex = 0, onClose, onShare, onEdit, onDelete }: MediaViewportProps) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const [index, setIndex] = useState(initialIndex)
+    const [menuOpen, setMenuOpen] = useState(false)
+
+    const hasMenu = !!(onShare || onEdit || onDelete)
+    const currentItem = items[index]
+
+    function handleDelete() {
+        if (!onDelete || !currentItem) return
+        if (window.confirm('Delete this item? This cannot be undone.')) onDelete(currentItem, index)
+    }
+
+    const menuItems: ActionSheetItem[] = currentItem ? [
+        ...(onShare ? [{ key: 'share', label: 'Share', icon: <ShareIcon className="w-4 h-4" />, onSelect: () => onShare(currentItem, index) }] : []),
+        ...(onEdit ? [{ key: 'edit', label: 'Edit', icon: <EditIcon className="w-4 h-4" />, onSelect: () => onEdit(currentItem, index) }] : []),
+        ...(onDelete ? [{ key: 'delete', label: 'Delete', icon: <TrashIcon className="w-4 h-4" />, destructive: true, onSelect: handleDelete }] : []),
+    ] : []
 
     useEffect(() => {
         const el = scrollRef.current
@@ -43,13 +64,24 @@ export function MediaViewport({ items, initialIndex = 0, onClose }: MediaViewpor
                 {items.length > 1 ? (
                     <span className="text-white/70 text-xs font-medium">{index + 1} / {items.length}</span>
                 ) : <span />}
-                <button
-                    onClick={onClose}
-                    className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center"
-                    aria-label="Close"
-                >
-                    <ChevronLeftIcon className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                    {hasMenu && (
+                        <button
+                            onClick={() => setMenuOpen(true)}
+                            className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center"
+                            aria-label="More options"
+                        >
+                            <MoreIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center"
+                        aria-label="Close"
+                    >
+                        <ChevronLeftIcon className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
 
             <div
@@ -76,6 +108,12 @@ export function MediaViewport({ items, initialIndex = 0, onClose }: MediaViewpor
                 ))}
             </div>
 
+            {items[index]?.caption && (
+                <div className="px-6 pb-2 pt-1 shrink-0">
+                    <p className="text-white/80 text-sm text-center">{items[index].caption}</p>
+                </div>
+            )}
+
             {items.length > 1 && (
                 <div className="flex items-center justify-center gap-1.5 py-3 shrink-0">
                     {items.map((_, i) => (
@@ -86,6 +124,8 @@ export function MediaViewport({ items, initialIndex = 0, onClose }: MediaViewpor
                     ))}
                 </div>
             )}
+
+            <ActionSheet open={menuOpen} onClose={() => setMenuOpen(false)} items={menuItems} />
         </div>
     )
 }

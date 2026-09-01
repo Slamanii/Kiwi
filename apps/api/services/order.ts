@@ -14,8 +14,16 @@ async function assertAdmin(communityId: string, userId: string) {
 const senderSelect = {
     id: true,
     name: true,
+    verificationStatus: true,
     profile: { select: { avatarUrl: true } }
 } as const
+
+// verificationStatus lives on User, not Profile — merge it into the nested
+// profile object so frontend code can read buyer.profile?.verificationStatus.
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
 
 // Buyer's way of flagging interest to the store admin(s) - just a queued Order, no conversation yet.
 // The alternative path is a plain DM to an admin, outside this flow entirely.
@@ -98,7 +106,7 @@ export async function getCommunityOrders(communityId: string, adminUserId: strin
     if (hasMore) orders.pop()
 
     return {
-        orders,
+        orders: orders.map(order => ({ ...order, buyer: mergeVerification(order.buyer) })),
         nextCursor: hasMore ? orders[orders.length - 1].id : null
     }
 }
@@ -125,7 +133,7 @@ export async function removeOrder(orderId: string, userId: string) {
 export async function followUpOnOrder(orderId: string, adminUserId: string, content: string) {
     const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { items: { include: { listing: true } } }
+        include: { items: { include: { listing: true } }, community: { select: { name: true } } }
     })
     if (!order) throw new Error('Order not found')
     await assertAdmin(order.communityId, adminUserId)
@@ -179,16 +187,19 @@ export async function followUpOnOrder(orderId: string, adminUserId: string, cont
         return created
     }, { timeout: 15000 })
 
-    getIO().to(`order:${message.conversationId}`).emit('message:new', message)
+    const result = { ...message, sender: mergeVerification(message.sender) }
+
+    getIO().to(`order:${result.conversationId}`).emit('message:new', result)
 
     await notify({
         userId: order.buyerId,
         type: NotificationType.ORDER_MESSAGE,
+        title: order.community.name,
         body: content.slice(0, 100),
-        metadata: { conversationId: message.conversationId }
+        metadata: { conversationId: result.conversationId }
     })
 
-    return message
+    return result
 }
 
 // Stock only moves here, once the admin confirms the sale actually happened - not at order
@@ -217,8 +228,15 @@ export async function completeOrder(orderId: string, adminUserId: string) {
         userId: order.buyerId,
         type: NotificationType.ORDER_COMPLETED,
         body: 'Your order was fulfilled - let others know how it went',
-        metadata: { orderId: order.id }
+        metadata: { orderId: order.id, conversationId: order.conversationId }
     })
+
+    if (order.conversationId) {
+        getIO().to(`order:${order.conversationId}`).emit('order:completed', {
+            conversationId: order.conversationId,
+            orderId: order.id
+        })
+    }
 
     return updated
 }
@@ -297,11 +315,13 @@ export async function getMyStoreConversations(userId: string) {
 export async function getCommunityStoreConversations(communityId: string, adminUserId: string) {
     await assertAdmin(communityId, adminUserId)
 
-    return prisma.storeConversation.findMany({
+    const conversations = await prisma.storeConversation.findMany({
         where: { communityId },
         orderBy: { lastMessageAt: 'desc' },
         include: { buyer: { select: senderSelect } }
     })
+
+    return conversations.map(c => ({ ...c, buyer: mergeVerification(c.buyer) }))
 }
 
 export async function getOrderConversationMessages(conversationId: string, userId: string, cursor?: string, limit = 30) {
@@ -328,7 +348,8 @@ export async function getOrderConversationMessages(conversationId: string, userI
             order: {
                 include: {
                     buyer: { select: senderSelect },
-                    items: { include: { listing: { select: { id: true, title: true, price: true, images: true } } } }
+                    items: { include: { listing: { select: { id: true, title: true, price: true, images: true } } } },
+                    review: { select: { id: true } }
                 }
             }
         }
@@ -338,8 +359,12 @@ export async function getOrderConversationMessages(conversationId: string, userI
     if (hasMore) messages.pop()
 
     return {
-        conversation,
-        messages,
+        conversation: { ...conversation, buyer: mergeVerification(conversation.buyer) },
+        messages: messages.map(m => ({
+            ...m,
+            sender: mergeVerification(m.sender),
+            order: m.order ? { ...m.order, buyer: mergeVerification(m.order.buyer) } : m.order,
+        })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -361,7 +386,10 @@ export async function markOrderConversationRead(conversationId: string, userId: 
 // buyer-facing "start conversation" path - existence of a conversationId (only ever created
 // inside followUpOnOrder) is what gates this, mirroring the "admin must DM first" rule.
 export async function sendOrderMessage(conversationId: string, senderId: string, data: SendMessageInput) {
-    const conversation = await prisma.storeConversation.findUnique({ where: { id: conversationId } })
+    const conversation = await prisma.storeConversation.findUnique({
+        where: { id: conversationId },
+        include: { community: { select: { name: true } } }
+    })
     if (!conversation) throw new Error('Conversation not found')
 
     const isBuyer = conversation.buyerId === senderId
@@ -396,7 +424,9 @@ export async function sendOrderMessage(conversationId: string, senderId: string,
         return created
     }, { timeout: 15000 })
 
-    getIO().to(`order:${conversationId}`).emit('message:new', message)
+    const result = { ...message, sender: mergeVerification(message.sender) }
+
+    getIO().to(`order:${conversationId}`).emit('message:new', result)
 
     if (isBuyer) {
         const admins = await prisma.communityMember.findMany({
@@ -406,6 +436,7 @@ export async function sendOrderMessage(conversationId: string, senderId: string,
         await Promise.all(admins.map(admin => notify({
             userId: admin.userId,
             type: NotificationType.ORDER_MESSAGE,
+            title: result.sender.name,
             body: notifyBody.slice(0, 100),
             metadata: { conversationId }
         })))
@@ -413,12 +444,13 @@ export async function sendOrderMessage(conversationId: string, senderId: string,
         await notify({
             userId: conversation.buyerId,
             type: NotificationType.ORDER_MESSAGE,
+            title: conversation.community.name,
             body: notifyBody.slice(0, 100),
             metadata: { conversationId }
         })
     }
 
-    return message
+    return result
 }
 
 // Buyer's alternative to a review - flags the order as unsatisfactory without leaving a rating.
@@ -438,7 +470,7 @@ export async function disputeOrder(orderId: string, buyerId: string) {
         userId: admin.userId,
         type: NotificationType.ORDER_MESSAGE,
         body: 'A buyer marked their order as unsatisfactory',
-        metadata: { orderId: order.id }
+        metadata: { orderId: order.id, communityId: order.communityId }
     })))
 
     return updated

@@ -93,7 +93,7 @@ export function CreateBidSheet({ seekId, onClose, onSuccess }: CreateBidSheetPro
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-neutral-900 rounded-3xl px-4 pt-4 pb-6 z-10 space-y-4">
@@ -223,7 +223,7 @@ export function CreateBidSheet({ seekId, onClose, onSuccess }: CreateBidSheetPro
             </div>
 
             {showCurrencyPicker && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/60" onClick={() => setShowCurrencyPicker(false)} />
                     <div className="relative w-full max-w-sm max-h-[80vh] overflow-y-auto bg-neutral-900 rounded-3xl px-4 pt-4 pb-6 z-10">
                         <p className="text-white/40 text-xs uppercase tracking-widest mb-3 px-1">Select Currency</p>

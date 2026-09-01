@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { pollApi } from '@/lib/api/poll'
 import type { Poll, PollResults } from '@/types'
 
@@ -11,9 +12,10 @@ type PollMessageBubbleProps = {
     timestamp: string
     senderName?: string
     senderAvatarUrl?: string | null
+    senderVerified?: boolean
 }
 
-export default function PollMessageBubble({ poll, isSent, timestamp, senderName, senderAvatarUrl }: PollMessageBubbleProps) {
+export default function PollMessageBubble({ poll, isSent, timestamp, senderName, senderAvatarUrl, senderVerified }: PollMessageBubbleProps) {
     const showSenderInfo = !!senderName && !isSent
     const [results, setResults] = useState<PollResults | null>(null)
     const [selected, setSelected] = useState<string[]>([])
@@ -75,7 +77,10 @@ export default function PollMessageBubble({ poll, isSent, timestamp, senderName,
             )}
             <div className="max-w-[80%] w-72">
                 {showSenderInfo && (
-                    <div className="text-white/40 text-[11px] mb-1 pl-1">{senderName}</div>
+                    <div className="flex items-center gap-1 text-white/40 text-[11px] mb-1 pl-1">
+                        {senderName}
+                        {senderVerified && <VerifiedBadge size="xs" />}
+                    </div>
                 )}
                 <div className={`px-3.5 py-3 ${isSent ? 'bg-blue-500 rounded-[18px_18px_4px_18px]' : 'bg-[#1c1c1e] rounded-[18px_18px_18px_4px]'}`}>
                     <div className="flex items-start justify-between gap-2">

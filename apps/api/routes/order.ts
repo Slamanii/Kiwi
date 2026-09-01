@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth.js'
+import { MessageType } from '@kiwi/types'
 import {
   createOrder,
   getCommunityOrders,
@@ -37,8 +38,15 @@ const reviewSchema = z.object({
 })
 
 const orderMessageSchema = z.object({
-  content: z.string().min(1),
+  type: z.nativeEnum(MessageType).optional(),
+  content: z.string().optional(),
+  mediaUrl: z.string().url().optional(),
+  mediaSize: z.number().optional(),
+  mediaDuration: z.number().optional(),
+  fileName: z.string().optional(),
   replyToId: z.string().optional(),
+}).refine(data => data.content || data.mediaUrl, {
+  message: 'Message must have content or media'
 })
 
 // buyer places an order (queues into the community's admin-only order panel)

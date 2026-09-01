@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { conversationApi, type ConversationType } from '@/lib/api/conversation'
-import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { ChevronLeftIcon, MicIcon } from '@/components/ui/Icons'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
+import { MediaViewport } from '@/components/ui/MediaViewport'
 
 type ConversationMessage = {
     id: string
@@ -20,6 +22,7 @@ type ControlPanelProps = {
     conversationId: string
     name: string
     avatarUrl?: string | null
+    verified?: boolean
     subtitle?: string
     otherUserId?: string
     initialMuted?: boolean
@@ -36,6 +39,7 @@ export default function ControlPanel({
     conversationId,
     name,
     avatarUrl,
+    verified,
     subtitle,
     otherUserId,
     initialMuted,
@@ -45,6 +49,7 @@ export default function ControlPanel({
     onBlocked,
 }: ControlPanelProps) {
     const [view, setView] = useState<View>('main')
+    const [avatarViewerOpen, setAvatarViewerOpen] = useState(false)
     const [muted, setMuted] = useState(!!initialMuted)
     const [pinned, setPinned] = useState(!!initialPinned)
     const [blocked, setBlocked] = useState(false)
@@ -144,9 +149,18 @@ export default function ControlPanel({
                 {view === 'main' && (
                     <div className="overflow-y-auto px-4 space-y-5">
                         <div className="flex flex-col items-center gap-2 pb-2">
-                            <Avatar src={avatarUrl} name={name} size="lg" />
+                            <button
+                                onClick={() => avatarUrl && setAvatarViewerOpen(true)}
+                                disabled={!avatarUrl}
+                                aria-label="View photo"
+                            >
+                                <Avatar src={avatarUrl} name={name} size="lg" />
+                            </button>
                             <div className="text-center">
-                                <p className="text-white font-semibold text-base">{name}</p>
+                                <p className="flex items-center justify-center gap-1.5 text-white font-semibold text-base">
+                                    {name}
+                                    {verified && <VerifiedBadge size="sm" />}
+                                </p>
                                 {subtitle && <p className="text-white/40 text-xs">{subtitle}</p>}
                             </div>
                         </div>
@@ -197,6 +211,8 @@ export default function ControlPanel({
                                                 <video src={m.mediaUrl ?? ''} className="w-full h-full object-cover" />
                                             ) : m.type === 'FILE' ? (
                                                 <span className="text-white/40 text-[11px] px-1 text-center truncate">{m.fileName ?? 'File'}</span>
+                                            ) : m.type === 'AUDIO' ? (
+                                                <MicIcon className="w-6 h-6 text-white/30" />
                                             ) : (
                                                 // eslint-disable-next-line @next/next/no-img-element
                                                 <img src={m.mediaUrl ?? ''} alt="" className="w-full h-full object-cover" />
@@ -240,6 +256,13 @@ export default function ControlPanel({
                     </div>
                 )}
             </div>
+
+            {avatarViewerOpen && avatarUrl && (
+                <MediaViewport
+                    items={[{ type: 'image', url: avatarUrl }]}
+                    onClose={() => setAvatarViewerOpen(false)}
+                />
+            )}
         </div>
     )
 }

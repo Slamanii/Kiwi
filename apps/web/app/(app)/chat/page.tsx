@@ -67,6 +67,7 @@ export default function ChatPage() {
                             key={t.id}
                             name={other.name}
                             avatarUrl={other.profile?.avatarUrl}
+                            verified={other.profile?.verificationStatus === 'VERIFIED'}
                             lastMessage={lastMessage?.content ?? t.seek.content}
                             timestamp={formatRelative(lastMessage?.createdAt ?? t.updatedAt)}
                             unreadCount={t.unreadCount}

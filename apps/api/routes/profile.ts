@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth.js'
-import { getProfile, updateProfile, updateBankDetails, submitVerificationRequest, searchUsers, submitRating, getRatings, getReviews, getCatalog, getCatalogItem, addCatalogItem, deleteCatalogItem } from '../services/profile.js'
+import { getProfile, updateProfile, updateBankDetails, submitVerificationRequest, searchUsers, submitRating, getRatings, getReviews, getCatalog, getCatalogItem, addCatalogItem, updateCatalogItem, deleteCatalogItem } from '../services/profile.js'
 
 
 const router = Router()
@@ -21,6 +21,10 @@ const updateProfileSchema = z.object({
 const catalogItemSchema = z.object({
     url: z.string().url(),
     type: z.enum(['IMAGE', 'VIDEO']),
+    caption: z.string().max(1000).optional(),
+})
+
+const catalogItemUpdateSchema = z.object({
     caption: z.string().max(1000).optional(),
 })
 
@@ -184,6 +188,21 @@ router.post('/catalog', requireAuth, async (req: Request, res: Response) => {
         const userId = req.user?.userId as string
         const result = await addCatalogItem(userId, parsed.data)
         return res.status(201).json(result)
+    } catch (err: any) {
+        return res.status(400).json({ error: err.message })
+    }
+})
+
+router.patch('/catalog/:itemId', requireAuth, async (req: Request, res: Response) => {
+    const parsed = catalogItemUpdateSchema.safeParse(req.body)
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    try {
+        const userId = req.user?.userId as string
+        const result = await updateCatalogItem(userId, req.params.itemId, parsed.data.caption)
+        return res.status(200).json(result)
     } catch (err: any) {
         return res.status(400).json({ error: err.message })
     }

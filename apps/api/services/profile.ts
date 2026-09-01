@@ -5,6 +5,11 @@ import  { notify } from './notification.js'
 import { getIO } from '../utils/socket.js'
 
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export type AgentProfileFilters = {
     search?: string
     location?: string
@@ -188,6 +193,17 @@ export async function addCatalogItem(userId: string, data: { url: string; type: 
             type: data.type,
             caption: data.caption ?? null,
         }
+    })
+}
+
+export async function updateCatalogItem(userId: string, itemId: string, caption?: string) {
+    const item = await prisma.catalogItem.findUnique({ where: { id: itemId } })
+    if (!item) throw new Error('Catalog item not found')
+    if (item.userId !== userId) throw new Error('Not authorized to edit this catalog item')
+
+    return prisma.catalogItem.update({
+        where: { id: itemId },
+        data: { caption: caption?.trim() || null }
     })
 }
 
@@ -380,6 +396,7 @@ export async function getReviews(agentId: string, cursor?: string, limit = 10) {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             }
@@ -390,7 +407,7 @@ export async function getReviews(agentId: string, cursor?: string, limit = 10) {
     if (hasMore) reviews.pop()
 
     return {
-        reviews,
+        reviews: reviews.map(review => ({ ...review, reviewer: mergeVerification(review.reviewer) })),
         nextCursor: hasMore ? reviews[reviews.length - 1].id : null
     }
 }

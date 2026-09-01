@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/api/admin'
 import { STATUS_STYLES } from '@/lib/adminStatus'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 type Application = {
     id: string
@@ -19,7 +20,7 @@ type Application = {
         id: string
         name: string
         email: string
-        profile?: { avatarUrl?: string; location?: string }
+        profile?: { avatarUrl?: string; location?: string; verificationStatus?: string | null }
     }
 }
 
@@ -91,7 +92,12 @@ export default function AdminApplicationsPage() {
                         <div key={app.id} className="bg-white/5 rounded-2xl p-5 flex flex-col gap-3">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
-                                    <p className="font-medium truncate">{app.user.name}</p>
+                                    <p className="flex items-center gap-1.5 font-medium truncate">
+                                        {app.user.name}
+                                        {app.user.profile?.verificationStatus === 'VERIFIED' && (
+                                            <VerifiedBadge size="xs" />
+                                        )}
+                                    </p>
                                     <p className="text-white/40 text-xs truncate">{app.user.email}</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1.5 shrink-0">

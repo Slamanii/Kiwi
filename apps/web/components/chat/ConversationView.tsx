@@ -3,13 +3,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MessageBubble from './MessageBubble'
+import MediaMessageBubble from './MediaMessageBubble'
+import TypingBubble from './TypingBubble'
 import MessageInput, { AttachmentType } from './MessageInput'
 import PollMessageBubble from '@/components/community/PollMessageBubble'
 import ListingMessageBubble from '@/components/community/ListingMessageBubble'
 import { OrderCard } from '@/components/community/OrderCard'
+import { OrderReviewSheet } from '@/components/community/OrderReviewSheet'
 import ParticipantHeader from './ParticipantHeader'
 import { ActionSheetItem } from './ActionSheet'
 import MessageActionMenu from './MessageActionMenu'
+import AudioRecorderSheet from './AudioRecorderSheet'
+import StickerPickerSheet from './StickerPickerSheet'
+import { MediaViewport } from '@/components/ui/MediaViewport'
 import { useCall } from '@/context/CallContext'
 import { usePresence, formatLastSeen } from '@/hooks/usePresence'
 import { useTypingEmitter, usePeerTyping } from '@/hooks/useTyping'
@@ -18,8 +24,11 @@ import { useSwipeToReply } from '@/hooks/useSwipeToReply'
 import { useSocket } from '@/context/SocketContext'
 import { conversationApi, type ConversationType } from '@/lib/api/conversation'
 import { pollApi } from '@/lib/api/poll'
+import { orderApi } from '@/lib/api/order'
+import { uploadApi } from '@/lib/api/upload'
 import { CopyIcon, PinIcon, ArchiveIcon, TrashIcon, ReplyIcon, SelectIcon } from '@/components/ui/Icons'
-import type { Message } from '@/types'
+import type { Message, Order, MediaItem } from '@/types'
+import type { SendMessageInput } from '@kiwi/types'
 
 function formatTime(iso: string) {
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -50,7 +59,7 @@ function contextType(kind: 'thread' | 'dm' | 'community' | 'order'): Conversatio
 type ConversationViewProps = {
     messages: Message[]
     currentUserId: string
-    onSend: (content: string, replyToId?: string) => void
+    onSend: (input: SendMessageInput) => void
     onAttach?: (type: AttachmentType) => void
     loading?: boolean
     hasMore?: boolean
@@ -64,6 +73,7 @@ type ConversationViewProps = {
         name: string
         avatarUrl?: string | null
         subtitle?: string
+        verified?: boolean
         onBack: () => void
         onInfo?: () => void
     }
@@ -109,6 +119,16 @@ export default function ConversationView({
     const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null)
     const [actionMessage, setActionMessage] = useState<Message | null>(null)
     const [actionAnchor, setActionAnchor] = useState<{ top: number; bottom: number; left: number; right: number } | null>(null)
+    const [completingOrderId, setCompletingOrderId] = useState<string | null>(null)
+    const [reviewOrder, setReviewOrder] = useState<Order | null>(null)
+    const [dismissedReviewOrderIds, setDismissedReviewOrderIds] = useState<Set<string>>(new Set())
+    const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+    const [showStickerPicker, setShowStickerPicker] = useState(false)
+    const [viewerItems, setViewerItems] = useState<{ items: MediaItem[]; index: number } | null>(null)
+    const cameraInputRef = useRef<HTMLInputElement>(null)
+    const galleryInputRef = useRef<HTMLInputElement>(null)
+    const videoInputRef = useRef<HTMLInputElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const headerSubtitle = (isCommunity || isOrder)
         ? header.subtitle
@@ -116,7 +136,7 @@ export default function ConversationView({
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ block: 'end' })
-    }, [messages.length])
+    }, [messages.length, peerTyping])
 
     useEffect(() => {
         if (!context) { setPinnedMessage(null); return }
@@ -144,6 +164,42 @@ export default function ConversationView({
         }
     }, [socket, context?.kind, context?.id])
 
+    useEffect(() => {
+        if (!isOrder) return
+        const pending = [...messages].reverse().find(m =>
+            m.order &&
+            m.order.status === 'COMPLETED' &&
+            m.order.buyerId === currentUserId &&
+            !m.order.review &&
+            !dismissedReviewOrderIds.has(m.order.id)
+        )
+        if (pending?.order) setReviewOrder(pending.order)
+    }, [isOrder, messages, currentUserId, dismissedReviewOrderIds])
+
+    async function handleCompleteOrder(orderId: string) {
+        if (completingOrderId) return
+        setCompletingOrderId(orderId)
+        try {
+            await orderApi.complete(orderId)
+        } catch (err: any) {
+            window.alert(err?.response?.data?.error ?? 'Something went wrong')
+        } finally {
+            setCompletingOrderId(null)
+        }
+    }
+
+    function closeReviewSheet() {
+        if (reviewOrder) setDismissedReviewOrderIds(prev => new Set(prev).add(reviewOrder.id))
+        setReviewOrder(null)
+    }
+
+    async function submitReview(score: number, comment?: string) {
+        if (!reviewOrder) return
+        await orderApi.review(reviewOrder.id, score, comment)
+        setDismissedReviewOrderIds(prev => new Set(prev).add(reviewOrder.id))
+        setReviewOrder(null)
+    }
+
     function handleScroll() {
         const el = scrollRef.current
         if (!el || !hasMore || loadingMore || !onLoadMore) return
@@ -155,8 +211,74 @@ export default function ConversationView({
     }
 
     function handleSend(content: string) {
-        onSend(content, replyTarget?.id)
+        onSend({ content, replyToId: replyTarget?.id })
         setReplyTarget(null)
+    }
+
+    function handleAttachType(type: AttachmentType) {
+        switch (type) {
+            case 'camera': cameraInputRef.current?.click(); break
+            case 'gallery': galleryInputRef.current?.click(); break
+            case 'video': videoInputRef.current?.click(); break
+            case 'file': fileInputRef.current?.click(); break
+            case 'audio': setShowAudioRecorder(true); break
+            case 'sticker': setShowStickerPicker(true); break
+            default: onAttach?.(type)
+        }
+    }
+
+    async function uploadAndSend(files: FileList | null, mappedType?: 'IMAGE' | 'VIDEO' | 'FILE') {
+        if (!files || files.length === 0) return
+        for (const file of Array.from(files)) {
+            const type = mappedType ?? (file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'FILE')
+            try {
+                const res = await uploadApi.uploadFile(file)
+                onSend({
+                    type,
+                    mediaUrl: res.data.url,
+                    mediaSize: res.data.size,
+                    fileName: res.data.fileName,
+                    replyToId: replyTarget?.id,
+                })
+            } catch (err) {
+                window.alert('Upload failed. Please try again.')
+            }
+        }
+        setReplyTarget(null)
+    }
+
+    async function handleSendAudio(blob: Blob, seconds: number) {
+        const file = new File([blob], 'voice-note.webm', { type: blob.type || 'audio/webm' })
+        try {
+            const res = await uploadApi.uploadFile(file)
+            onSend({
+                type: 'AUDIO',
+                mediaUrl: res.data.url,
+                mediaSize: res.data.size,
+                mediaDuration: seconds,
+                fileName: res.data.fileName,
+                replyToId: replyTarget?.id,
+            })
+        } catch (err) {
+            window.alert('Upload failed. Please try again.')
+        }
+        setReplyTarget(null)
+    }
+
+    function handleSendSticker(emoji: string) {
+        onSend({ type: 'STICKER', content: emoji, replyToId: replyTarget?.id })
+        setReplyTarget(null)
+    }
+
+    function openMediaViewer(index: number) {
+        const items: MediaItem[] = messages
+            .filter(m => (m.type === 'IMAGE' || m.type === 'VIDEO') && m.mediaUrl)
+            .map(m => ({ type: m.type === 'VIDEO' ? 'video' : 'image', url: m.mediaUrl as string }))
+        const target = messages[index]
+        const targetIdx = messages
+            .filter(m => (m.type === 'IMAGE' || m.type === 'VIDEO') && m.mediaUrl)
+            .findIndex(m => m.id === target.id)
+        setViewerItems({ items, index: Math.max(0, targetIdx) })
     }
 
     function toggleSelected(id: string) {
@@ -275,10 +397,11 @@ export default function ConversationView({
                     avatarUrl={header.avatarUrl}
                     isOnline={online}
                     subtitle={headerSubtitle}
+                    verified={header.verified}
                     onBack={header.onBack}
                     onInfo={header.onInfo}
-                    onVoiceCall={(isCommunity || isOrder) ? undefined : () => startCall({ id: header.peerId, name: header.name, avatarUrl: header.avatarUrl }, 'audio')}
-                    onVideoCall={(isCommunity || isOrder) ? undefined : () => startCall({ id: header.peerId, name: header.name, avatarUrl: header.avatarUrl }, 'video')}
+                    onVoiceCall={(isCommunity || isOrder) ? undefined : () => startCall({ id: header.peerId, name: header.name, avatarUrl: header.avatarUrl, verified: header.verified }, 'audio')}
+                    onVideoCall={(isCommunity || isOrder) ? undefined : () => startCall({ id: header.peerId, name: header.name, avatarUrl: header.avatarUrl, verified: header.verified }, 'video')}
                 />
             </div>
 
@@ -352,13 +475,21 @@ export default function ConversationView({
                                                     timestamp={formatTime(m.createdAt)}
                                                     senderName={m.sender?.name}
                                                     senderAvatarUrl={m.sender?.profile?.avatarUrl}
+                                                    senderVerified={m.sender?.profile?.verificationStatus === 'VERIFIED'}
                                                 />
                                             ) : m.order ? (
                                                 <div className="px-4 py-2">
                                                     <p className={`text-white/30 text-[11px] mb-1 ${isSent ? 'text-right' : 'text-left'}`}>
                                                         {m.sender?.name} · {formatTime(m.createdAt)}
                                                     </p>
-                                                    <OrderCard order={m.order} readOnly />
+                                                    <OrderCard
+                                                        order={m.order}
+                                                        currentUserId={currentUserId}
+                                                        readOnly
+                                                        isAdmin={canModerate}
+                                                        onComplete={() => handleCompleteOrder(m.order!.id)}
+                                                        completing={completingOrderId === m.order.id}
+                                                    />
                                                 </div>
                                             ) : m.type === 'POLL' && m.poll ? (
                                                 <PollMessageBubble
@@ -367,6 +498,7 @@ export default function ConversationView({
                                                     timestamp={formatTime(m.createdAt)}
                                                     senderName={m.sender?.name}
                                                     senderAvatarUrl={m.sender?.profile?.avatarUrl}
+                                                    senderVerified={m.sender?.profile?.verificationStatus === 'VERIFIED'}
                                                 />
                                             ) : m.listing ? (
                                                 <ListingMessageBubble
@@ -375,7 +507,22 @@ export default function ConversationView({
                                                     timestamp={formatTime(m.createdAt)}
                                                     senderName={m.sender?.name}
                                                     senderAvatarUrl={m.sender?.profile?.avatarUrl}
+                                                    senderVerified={m.sender?.profile?.verificationStatus === 'VERIFIED'}
                                                     onOpen={() => { if (!selectionMode) router.push(`/listings/${m.listing!.id}`) }}
+                                                />
+                                            ) : m.type === 'STICKER' ? (
+                                                <div className={`flex px-4 py-1 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                                                    <span className="text-6xl leading-none">{m.content}</span>
+                                                </div>
+                                            ) : (m.type === 'IMAGE' || m.type === 'VIDEO' || m.type === 'AUDIO' || m.type === 'FILE') && m.mediaUrl ? (
+                                                <MediaMessageBubble
+                                                    message={m}
+                                                    isSent={isSent}
+                                                    timestamp={formatTime(m.createdAt)}
+                                                    senderName={m.sender?.name}
+                                                    senderAvatarUrl={m.sender?.profile?.avatarUrl}
+                                                    senderVerified={m.sender?.profile?.verificationStatus === 'VERIFIED'}
+                                                    onOpenMedia={() => { if (!selectionMode) openMediaViewer(i) }}
                                                 />
                                             ) : (
                                                 <MessageBubble
@@ -384,6 +531,7 @@ export default function ConversationView({
                                                     timestamp={formatTime(m.createdAt)}
                                                     senderName={m.sender?.name}
                                                     senderAvatarUrl={m.sender?.profile?.avatarUrl}
+                                                    senderVerified={m.sender?.profile?.verificationStatus === 'VERIFIED'}
                                                 />
                                             )}
                                         </MessageRow>
@@ -391,6 +539,9 @@ export default function ConversationView({
                                 )
                             })}
                         </>
+                    )}
+                    {peerTyping && !isCommunity && !isOrder && (
+                        <TypingBubble avatarUrl={header.avatarUrl} name={header.name} />
                     )}
                     <div ref={bottomRef} />
                 </div>
@@ -411,7 +562,7 @@ export default function ConversationView({
                 ) : (
                     <MessageInput
                         onSend={handleSend}
-                        onAttach={onAttach}
+                        onAttach={handleAttachType}
                         onTyping={notifyTyping}
                         onStopTyping={notifyStopped}
                         isDisabled={disabled}
@@ -423,6 +574,57 @@ export default function ConversationView({
                 )}
             </div>
 
+            <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => { uploadAndSend(e.target.files, 'IMAGE'); e.target.value = '' }}
+            />
+            <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={e => { uploadAndSend(e.target.files); e.target.value = '' }}
+            />
+            <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => { uploadAndSend(e.target.files, 'VIDEO'); e.target.value = '' }}
+            />
+            <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => { uploadAndSend(e.target.files, 'FILE'); e.target.value = '' }}
+            />
+
+            <AudioRecorderSheet
+                open={showAudioRecorder}
+                onClose={() => setShowAudioRecorder(false)}
+                onSend={handleSendAudio}
+            />
+
+            <StickerPickerSheet
+                open={showStickerPicker}
+                onClose={() => setShowStickerPicker(false)}
+                onSelect={handleSendSticker}
+            />
+
+            {viewerItems && (
+                <MediaViewport
+                    items={viewerItems.items}
+                    initialIndex={viewerItems.index}
+                    onClose={() => setViewerItems(null)}
+                />
+            )}
+
             <MessageActionMenu
                 open={!!actionMessage}
                 anchorRect={actionAnchor}
@@ -432,6 +634,14 @@ export default function ConversationView({
             />
 
             {infoPanel}
+
+            {reviewOrder && (
+                <OrderReviewSheet
+                    storeName={header.name}
+                    onClose={closeReviewSheet}
+                    onSubmit={submitReview}
+                />
+            )}
         </div>
     )
 }

@@ -1,5 +1,6 @@
 import { Avatar } from '@/components/ui/Avatar'
 import { RatingStars } from '@/components/profile/RatingStars'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 type Review = {
     id: string
@@ -9,7 +10,7 @@ type Review = {
     reviewer: {
         id: string
         name: string
-        profile?: { avatarUrl?: string | null } | null
+        profile?: { avatarUrl?: string | null; verificationStatus?: string | null } | null
     }
 }
 
@@ -25,8 +26,11 @@ export function ReviewCard({ review }: { review: Review }) {
 
                 <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold text-white truncate">
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-white truncate">
                             {review.reviewer.name}
+                            {review.reviewer.profile?.verificationStatus === 'VERIFIED' && (
+                                <VerifiedBadge size="xs" />
+                            )}
                         </span>
                         <span className="text-[11px] text-gray-500 shrink-0">
                             {new Date(review.createdAt).toLocaleDateString()}

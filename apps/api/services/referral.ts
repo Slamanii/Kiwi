@@ -4,6 +4,11 @@ import { notify } from './notification.js'
 import axios from 'axios'
 import { config } from '../config.js'
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function getReferralStats(userId: string) {
     const [total, paid, pending] = await Promise.all([
         prisma.referral.count({ where: { referrerId: userId } }),
@@ -66,6 +71,7 @@ export async function getMyReferrals(userId: string, cursor?: string, limit = 20
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             }
@@ -81,7 +87,7 @@ export async function getMyReferrals(userId: string, cursor?: string, limit = 20
             paid: r.paid,
             paidAt: r.paidAt,
             createdAt: r.createdAt,
-            referred: r.referred
+            referred: mergeVerification(r.referred)
         })),
         nextCursor: hasMore ? referrals[referrals.length - 1].id : null
     }

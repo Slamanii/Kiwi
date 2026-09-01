@@ -11,6 +11,7 @@ export type CallPeer = {
     id: string
     name: string
     avatarUrl?: string | null
+    verified?: boolean
 }
 
 type CallSignalPayload = {
@@ -22,6 +23,7 @@ type CallSignalPayload = {
 type CallInvitePayload = CallSignalPayload & {
     fromName: string
     fromAvatarUrl?: string | null
+    fromVerified?: boolean
     kind: CallKind
 }
 
@@ -169,6 +171,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                     fromUserId: user.id,
                     fromName: user.name,
                     fromAvatarUrl: user.profile?.avatarUrl,
+                    fromVerified: user.profile?.verificationStatus === 'VERIFIED',
                     kind,
                 } as CallInvitePayload)
             })
@@ -238,7 +241,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                 return
             }
             callIdRef.current = payload.callId
-            setPeer({ id: payload.fromUserId, name: payload.fromName, avatarUrl: payload.fromAvatarUrl })
+            setPeer({ id: payload.fromUserId, name: payload.fromName, avatarUrl: payload.fromAvatarUrl, verified: payload.fromVerified })
             setCallKind(payload.kind)
             setState('inbound')
         }

@@ -1,5 +1,6 @@
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { Seek, UserRole } from '@/types'
 import { ActionRow } from '@/components/seek/ActionRow'
 import { SeekTags } from '@/components/seek/SeekTags'
@@ -69,7 +70,7 @@ export function ReseekCard({
                         >
                         {seek.author.name}
                         </span>
-                        {isVerified && <Badge label="Verified" variant="green" />}
+                        {isVerified && <VerifiedBadge />}
                     </div>
                     <span className="text-xs text-gray-400">{formatTime(seek.createdAt)}</span>
                 </div>
@@ -98,6 +99,9 @@ export function ReseekCard({
                         <span className="text-xs font-semibold text-white">
                             {originalSeek.author.name}
                         </span>
+                        {originalSeek.author.profile?.verificationStatus === 'VERIFIED' && (
+                            <VerifiedBadge size="xs" />
+                        )}
                         <span className="text-xs text-gray-500">
                             {formatTime(originalSeek.createdAt)}
                         </span>

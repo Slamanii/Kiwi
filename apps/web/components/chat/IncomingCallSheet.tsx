@@ -2,6 +2,7 @@
 
 import { Avatar } from '@/components/ui/Avatar'
 import { PhoneIcon, PhoneOffIcon, VideoIcon } from '@/components/ui/Icons'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { useCall } from '@/context/CallContext'
 
 export default function IncomingCallSheet() {
@@ -13,7 +14,10 @@ export default function IncomingCallSheet() {
         <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-between py-16">
             <div className="flex flex-col items-center gap-4 mt-12">
                 <Avatar src={peer.avatarUrl} name={peer.name} size="lg" />
-                <span className="text-white text-xl font-semibold">{peer.name}</span>
+                <span className="flex items-center gap-1.5 text-white text-xl font-semibold">
+                    {peer.name}
+                    {peer.verified && <VerifiedBadge size="sm" />}
+                </span>
                 <span className="text-white/50 text-sm">Incoming {callKind === 'video' ? 'video' : 'voice'} call…</span>
             </div>
 

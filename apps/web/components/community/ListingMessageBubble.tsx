@@ -1,6 +1,7 @@
 'use client'
 
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { formatNaira } from '@/lib/filterconfig'
 import { isVideoUrl } from '@/lib/marketplaceConfig'
 import type { Listing } from '@/types'
@@ -11,6 +12,7 @@ type ListingMessageBubbleProps = {
     timestamp: string
     senderName?: string
     senderAvatarUrl?: string | null
+    senderVerified?: boolean
     onOpen: () => void
 }
 
@@ -20,6 +22,7 @@ export default function ListingMessageBubble({
     timestamp,
     senderName,
     senderAvatarUrl,
+    senderVerified,
     onOpen,
 }: ListingMessageBubbleProps) {
     const showSenderInfo = !!senderName && !isSent
@@ -35,7 +38,10 @@ export default function ListingMessageBubble({
             )}
             <div className="max-w-[70%]">
                 {showSenderInfo && (
-                    <div className="text-white/40 text-[11px] mb-1 pl-1">{senderName}</div>
+                    <div className="flex items-center gap-1 text-white/40 text-[11px] mb-1 pl-1">
+                        {senderName}
+                        {senderVerified && <VerifiedBadge size="xs" />}
+                    </div>
                 )}
                 <button
                     onClick={onOpen}

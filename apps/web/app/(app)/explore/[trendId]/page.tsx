@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { SeekFilter } from '@/components/seek/SeekFilters'
 import { SeekCardSkeleton } from '@/components/seek/SeekcardSkeleton'
 import { CreateBidSheet } from '@/components/bid/CreateBidSheet'
@@ -40,7 +41,7 @@ export default function TrendDetailPage() {
     const [bookmarked,     setBookmarked]     = useState<Set<string>>(new Set())
     const [bidSeekId,      setBidSeekId]      = useState<string | null>(null)
     const [reseekSeekId,   setReseekSeekId]   = useState<string | null>(null)
-    const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({})
+    const [appliedFilters, setAppliedFilters] = useLocalStorage<AppliedFilters>('kiwi:filters:explore', {})
 
     useEffect(() => {
         let cancelled = false

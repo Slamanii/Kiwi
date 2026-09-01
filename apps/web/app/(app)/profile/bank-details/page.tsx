@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { profileApi } from '@/lib/api/profile'
 import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { BankPicker } from '@/components/ui/BankPicker'
 
 const inputClass = "w-full bg-white/5 border border-white/8 rounded-2xl px-4 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
 
@@ -69,13 +70,8 @@ export default function BankDetailsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                    <label className="text-white/60 text-xs">Bank code</label>
-                    <input
-                        value={bankCode}
-                        onChange={e => setBankCode(e.target.value)}
-                        placeholder="e.g. 058"
-                        className={inputClass}
-                    />
+                    <label className="text-white/60 text-xs">Bank</label>
+                    <BankPicker value={bankCode} onChange={setBankCode} />
                 </div>
 
                 <div className="space-y-1.5">

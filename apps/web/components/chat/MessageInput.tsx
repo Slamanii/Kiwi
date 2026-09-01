@@ -126,7 +126,7 @@ export default function MessageInput({ onSend, onAttach, onTyping, onStopTyping,
                 <input
                     type="text"
                     value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    onChange={(e) => handleChange(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder={isDisabled ? 'Thread is closed' : 'Type a message...'}
                     disabled={isDisabled}

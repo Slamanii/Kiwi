@@ -8,6 +8,7 @@ import { listingApi } from '@/lib/api/listing'
 import { orderApi } from '@/lib/api/order'
 import type { Listing } from '@/types'
 import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { MediaViewport } from '@/components/ui/MediaViewport'
 
 export default function ListingDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -18,6 +19,7 @@ export default function ListingDetailPage() {
     const [favorited, setFavorited] = useState(false)
     const [ordering, setOrdering] = useState(false)
     const [ordered, setOrdered] = useState(false)
+    const [viewerOpen, setViewerOpen] = useState(false)
 
     useEffect(() => {
         listingApi.getById(id)
@@ -74,6 +76,7 @@ export default function ListingDetailPage() {
 
     const cover = listing.images[0]
     const coverIsVideo = !!cover && isVideoUrl(cover)
+    const media = listing.images.map(url => ({ type: isVideoUrl(url) ? 'video' as const : 'image' as const, url }))
 
     return (
         <div className="min-h-full pb-10">
@@ -88,13 +91,20 @@ export default function ListingDetailPage() {
             </div>
 
             {cover && (
-                <div className="px-5 pt-4 pb-4 flex justify-center">
+                <button
+                    onClick={() => setViewerOpen(true)}
+                    className="w-full px-5 pt-4 pb-4 flex justify-center text-left"
+                >
                     {coverIsVideo ? (
                         <video src={cover} className="max-h-80 w-full object-contain rounded-2xl" muted playsInline controls />
                     ) : (
                         <img src={cover} alt={listing.title} className="max-h-80 w-full object-contain rounded-2xl" />
                     )}
-                </div>
+                </button>
+            )}
+
+            {viewerOpen && (
+                <MediaViewport items={media} initialIndex={0} onClose={() => setViewerOpen(false)} />
             )}
 
             <div className="px-5">

@@ -21,6 +21,7 @@ type CallInvitePayload = {
     fromUserId: string
     fromName: string
     fromAvatarUrl?: string | null
+    fromVerified?: boolean
     kind: 'audio' | 'video'
 }
 

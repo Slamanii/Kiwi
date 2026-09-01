@@ -61,6 +61,7 @@ export default function DMListPage() {
                             key={c.id}
                             name={c.otherUser.name}
                             avatarUrl={c.otherUser.profile?.avatarUrl}
+                            verified={c.otherUser.profile?.verificationStatus === 'VERIFIED'}
                             lastMessage={c.lastMessage ?? 'Say hello 👋'}
                             timestamp={formatRelative(c.lastMessageAt)}
                             unreadCount={c.unreadCount}

@@ -25,6 +25,7 @@ type ChatListItemProps = {
     lastMessage: string
     timestamp: string
     avatarUrl?: string | null
+    verified?: boolean
     unreadCount?: number
     isTyping?: boolean
     href: string
@@ -41,6 +42,7 @@ export default function ChatListItem({
     lastMessage,
     timestamp,
     avatarUrl,
+    verified,
     unreadCount,
     isTyping,
     href,
@@ -118,6 +120,7 @@ export default function ChatListItem({
                 <AvatarName
                     name={name}
                     avatarUrl={avatarUrl}
+                    verified={verified}
                     size="lg"
                     subtitle={isTyping ? 'typing…' : lastMessage}
                     subtitleClassName={isTyping ? 'text-cyan-400' : undefined}

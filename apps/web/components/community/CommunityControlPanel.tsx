@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
+import { MediaViewport } from '@/components/ui/MediaViewport'
 import { ProfileStat } from '@/components/profile/DataCard'
 import { AvatarCropModal } from '@/components/profile/AvatarCropModal'
 import { communityApi } from '@/lib/api/community'
@@ -36,6 +38,7 @@ export default function CommunityControlPanel({ community, currentUserId, onClos
     const [cropFile, setCropFile] = useState<File | null>(null)
     const [uploadingAvatar, setUploadingAvatar] = useState(false)
     const [avatarError, setAvatarError] = useState<string | null>(null)
+    const [avatarViewerOpen, setAvatarViewerOpen] = useState(false)
 
     const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -156,7 +159,13 @@ export default function CommunityControlPanel({ community, currentUserId, onClos
                 <div className="overflow-y-auto px-4 space-y-5">
                     <div className="flex flex-col items-center gap-2 pb-2">
                         <div className="relative">
-                            <Avatar src={community.avatarUrl} name={community.name} size="lg" />
+                            <button
+                                onClick={() => community.avatarUrl && setAvatarViewerOpen(true)}
+                                disabled={!community.avatarUrl}
+                                aria-label="View photo"
+                            >
+                                <Avatar src={community.avatarUrl} name={community.name} size="lg" />
+                            </button>
                             {isAdmin && (
                                 <div
                                     onClick={() => fileInputRef.current?.click()}
@@ -248,7 +257,12 @@ export default function CommunityControlPanel({ community, currentUserId, onClos
                                                     {requests.map(r => (
                                                         <div key={r.id} className="flex items-center gap-3 py-2">
                                                             <Avatar src={r.user.profile?.avatarUrl} name={r.user.name} size="md" />
-                                                            <p className="flex-1 min-w-0 text-white text-sm truncate">{r.user.name}</p>
+                                                            <p className="flex items-center gap-1.5 flex-1 min-w-0 text-white text-sm truncate">
+                                                                {r.user.name}
+                                                                {r.user.profile?.verificationStatus === 'VERIFIED' && (
+                                                                    <VerifiedBadge size="xs" />
+                                                                )}
+                                                            </p>
                                                             <button
                                                                 onClick={() => handleRequestAction(r.id, true)}
                                                                 className="text-[11px] font-semibold text-black bg-cyan-400 px-3 py-1 rounded-full"
@@ -295,6 +309,13 @@ export default function CommunityControlPanel({ community, currentUserId, onClos
                     file={cropFile}
                     onCancel={() => setCropFile(null)}
                     onConfirm={handleCropConfirm}
+                />
+            )}
+
+            {avatarViewerOpen && community.avatarUrl && (
+                <MediaViewport
+                    items={[{ type: 'image', url: community.avatarUrl }]}
+                    onClose={() => setAvatarViewerOpen(false)}
                 />
             )}
         </div>

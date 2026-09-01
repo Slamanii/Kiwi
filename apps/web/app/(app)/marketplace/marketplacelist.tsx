@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { listingApi } from '@/lib/api/listing'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { BrowseFilterBar, type BrowseFilterKey } from '@/components/community/BrowseFilterBar'
@@ -16,16 +17,16 @@ export function MarketplaceList() {
     const router = useRouter()
     const { user } = useAuth()
 
-    const [search, setSearch] = useState('')
+    const [search, setSearch] = useLocalStorage('kiwi:filters:marketplace:search', '')
     const [debouncedSearch, setDebouncedSearch] = useState('')
-    const [scope, setScope] = useState('ALL')
-    const [scopeLabel, setScopeLabel] = useState('All')
-    const [category, setCategory] = useState<ListingCategory | null>(null)
-    const [categoryLabel, setCategoryLabel] = useState('Category')
-    const [condition, setCondition] = useState<ListingCondition | null>(null)
-    const [conditionLabel, setConditionLabel] = useState('Condition')
-    const [location, setLocation] = useState<string | null>(null)
-    const [locationLabel, setLocationLabel] = useState('Location')
+    const [scope, setScope] = useLocalStorage('kiwi:filters:marketplace:scope', 'ALL')
+    const [scopeLabel, setScopeLabel] = useLocalStorage('kiwi:filters:marketplace:scopeLabel', 'All')
+    const [category, setCategory] = useLocalStorage<ListingCategory | null>('kiwi:filters:marketplace:category', null)
+    const [categoryLabel, setCategoryLabel] = useLocalStorage('kiwi:filters:marketplace:categoryLabel', 'Category')
+    const [condition, setCondition] = useLocalStorage<ListingCondition | null>('kiwi:filters:marketplace:condition', null)
+    const [conditionLabel, setConditionLabel] = useLocalStorage('kiwi:filters:marketplace:conditionLabel', 'Condition')
+    const [location, setLocation] = useLocalStorage<string | null>('kiwi:filters:marketplace:location', null)
+    const [locationLabel, setLocationLabel] = useLocalStorage('kiwi:filters:marketplace:locationLabel', 'Location')
     const [filterKey, setFilterKey] = useState<BrowseFilterKey | null>(null)
 
     const [listings, setListings] = useState<Listing[]>([])

@@ -7,6 +7,7 @@ type ParticipantHeaderProps = {
     avatarUrl?: string | null
     isOnline?: boolean
     subtitle?: string
+    verified?: boolean
     onBack?: () => void
     onVoiceCall?: () => void
     onVideoCall?: () => void
@@ -19,6 +20,7 @@ export default function ParticipantHeader({
     isOnline,
     onBack,
     subtitle,
+    verified,
     onVoiceCall,
     onVideoCall,
     onInfo,
@@ -43,6 +45,7 @@ export default function ParticipantHeader({
                     avatarUrl={avatarUrl}
                     size="lg"
                     subtitle={subtitle ?? (isOnline ? 'Online' : 'Offline')}
+                    verified={verified}
                 />
                 {isOnline && (
                     <div className="absolute bottom-0.5 left-9 w-3 h-3 rounded-full bg-green-500 border-2 border-black" />

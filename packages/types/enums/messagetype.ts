@@ -3,6 +3,8 @@ export const MessageType = {
     AUDIO: 'AUDIO',
     VIDEO: 'VIDEO',
     FILE: 'FILE',
-    POLL: 'POLL'
+    POLL: 'POLL',
+    IMAGE: 'IMAGE',
+    STICKER: 'STICKER'
 } as const
 export type MessageType = (typeof MessageType)[keyof typeof MessageType]

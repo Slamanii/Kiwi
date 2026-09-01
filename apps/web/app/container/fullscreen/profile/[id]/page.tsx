@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { ProfileCard } from '@/components/profile/BioCard'
 import { ProfileStatsGrid } from '@/components/profile/DataCard'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { profileApi } from '@/lib/api/profile'
 import type { User } from '@/types'
 import { ChevronLeftIcon } from '@/components/ui/Icons'
@@ -81,7 +82,10 @@ export default function PublicProfilePage() {
                 >
                     <ChevronLeftIcon className="w-5 h-5 text-white" />
                 </button>
-                <span className="text-base font-semibold text-white">{profile.name}</span>
+                <span className="flex items-center gap-1.5 text-base font-semibold text-white">
+                    {profile.name}
+                    {profile.profile?.verificationStatus === 'VERIFIED' && <VerifiedBadge />}
+                </span>
             </div>
 
             <div className="px-4 py-4 space-y-4">

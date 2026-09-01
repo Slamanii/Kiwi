@@ -1,4 +1,5 @@
 import api from './index'
+import type { SendMessageInput } from '@kiwi/types'
 
 export const orderApi = {
     create: (communityId: string, items: { listingId: string; quantity: number }[], description?: string) =>
@@ -23,8 +24,8 @@ export const orderApi = {
         api.get(`/orders/conversations/community/${communityId}`),
     getConversationMessages: (conversationId: string, cursor?: string) =>
         api.get(`/orders/conversation/${conversationId}`, { params: { cursor } }),
-    sendConversationMessage: (conversationId: string, content: string, replyToId?: string) =>
-        api.post(`/orders/conversation/${conversationId}`, { content, replyToId }),
+    sendConversationMessage: (conversationId: string, data: SendMessageInput) =>
+        api.post(`/orders/conversation/${conversationId}`, data),
     markRead: (conversationId: string) =>
         api.patch(`/orders/conversation/${conversationId}/read`),
 }

@@ -230,9 +230,9 @@ export type ThreadDetail = {
     agentAccepted: boolean
     createdAt: string
     seek: Seek
-    client: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    client: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
     agent: Pick<User, 'id' | 'name'> & {
-        profile?: Pick<Profile, 'avatarUrl' | 'rating' | 'completedDeals' | 'rate' | 'policyNote' | 'inspectionFee'>
+        profile?: Pick<Profile, 'avatarUrl' | 'rating' | 'completedDeals' | 'rate' | 'policyNote' | 'inspectionFee' | 'verificationStatus'>
     }
     messages: Message[]
     agreement: Agreement | null
@@ -247,8 +247,8 @@ export type ThreadSummary = {
     createdAt: string
     updatedAt: string
     seek: Pick<Seek, 'id' | 'content' | 'type' | 'location' | 'budget'>
-    client: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
-    agent: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'rating'> }
+    client: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
+    agent: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'rating' | 'verificationStatus'> }
     agreement: {
         id: string
         status: AgreementStatus
@@ -263,13 +263,13 @@ export type ThreadSummary = {
 
 export type DMConversationSummary = {
     id: string
-    otherUser: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    otherUser: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
     lastMessage?: string
     lastMessageAt?: string
     unreadCount: number
 }
 
-export type MessageType = 'TEXT' | 'AUDIO' | 'FILE' | 'VIDEO' | 'POLL'
+export type MessageType = 'TEXT' | 'AUDIO' | 'FILE' | 'VIDEO' | 'POLL' | 'IMAGE' | 'STICKER'
 
 export type PollOptionData = {
     id: string
@@ -339,7 +339,7 @@ export type Message = {
     replyToId?: string
     replyTo?: MessageReplyPreview
     createdAt: string
-    sender: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    sender: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
 }
 
 export type NotificationType =
@@ -444,7 +444,7 @@ export type CommunityJoinRequest = {
     status: CommunityJoinRequestStatus
     createdAt: string
     respondedAt?: string
-    user: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    user: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
 }
 
 export type ListingType = 'FIXED' | 'AUCTION'
@@ -524,7 +524,8 @@ export type Order = {
     createdAt: string
     updatedAt: string
     items: OrderItem[]
-    buyer?: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    buyer?: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
+    review?: Pick<CommunityReview, 'id'> | null
 }
 
 export type StoreConversation = {
@@ -535,7 +536,7 @@ export type StoreConversation = {
     lastMessageAt?: string
     createdAt: string
     unreadCount?: number
-    buyer?: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl'> }
+    buyer?: Pick<User, 'id' | 'name'> & { profile?: Pick<Profile, 'avatarUrl' | 'verificationStatus'> }
     community?: Pick<Community, 'id' | 'name' | 'avatarUrl' | 'type'>
 }
 
@@ -572,4 +573,5 @@ export type Review = {
 export type MediaItem = {
     type: 'image' | 'video'
     url: string
+    caption?: string | null
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { MicIcon, MicOffIcon, PhoneOffIcon } from '@/components/ui/Icons'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { useCall } from '@/context/CallContext'
 
 export default function AudioCall() {
@@ -21,7 +22,10 @@ export default function AudioCall() {
 
             <div className="flex flex-col items-center gap-4 mt-12">
                 <Avatar src={peer.avatarUrl} name={peer.name} size="lg" />
-                <span className="text-white text-xl font-semibold">{peer.name}</span>
+                <span className="flex items-center gap-1.5 text-white text-xl font-semibold">
+                    {peer.name}
+                    {peer.verified && <VerifiedBadge size="sm" />}
+                </span>
                 <span className="text-white/50 text-sm">{state === 'outbound' ? 'Calling…' : 'Connected'}</span>
             </div>
 

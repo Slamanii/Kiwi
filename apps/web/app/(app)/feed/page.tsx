@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { useFeed } from '@/hooks/useFeed'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useUnreadCount } from '@/hooks/useUnreadCount'
 import { NotificationBell } from '@/components/notification/NotificationBell'
 import { SeekCardSkeleton } from '@/components/seek/SeekcardSkeleton'
@@ -12,6 +13,7 @@ import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { QuickLinkCard } from '@/components/ui/QuickLinkCard'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { CreateBidSheet } from '@/components/bid/CreateBidSheet'
 import { CreateReseekSheet } from '@/components/seek/CreateReseekSheet'
 import { seekApi } from '@/lib/api/seek'
@@ -36,7 +38,7 @@ export default function FeedPage() {
     const [bookmarked,     setBookmarked]     = useState<Set<string>>(new Set())
     const [bidSeekId,      setBidSeekId]      = useState<string | null>(null)
     const [reseekSeekId,   setReseekSeekId]   = useState<string | null>(null)
-    const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({})
+    const [appliedFilters, setAppliedFilters] = useLocalStorage<AppliedFilters>('kiwi:filters:feed', {})
     const [userResults,    setUserResults]    = useState<SearchUser[]>([])
     const [searching,      setSearching]      = useState(false)
 
@@ -183,7 +185,7 @@ export default function FeedPage() {
                                 <Avatar src={u.profile?.avatarUrl} name={u.name} size="sm" />
                                 <span className="text-sm font-semibold text-white">{u.name}</span>
                                 {u.profile?.verificationStatus === 'VERIFIED' && (
-                                    <span className="text-xs text-cyan-400">✓</span>
+                                    <VerifiedBadge size="xs" />
                                 )}
                             </button>
                         ))

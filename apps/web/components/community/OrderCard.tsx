@@ -1,4 +1,5 @@
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { formatNaira } from '@/lib/filterconfig'
 import type { Order } from '@/types'
 
@@ -10,6 +11,10 @@ type OrderCardProps = {
     loading?: boolean
     /** Renders as a plain summary with no action button — used inline in a conversation. */
     readOnly?: boolean
+    /** Vendor-only "mark complete" action, shown to both parties but only clickable by the vendor. */
+    onComplete?: () => void
+    completing?: boolean
+    isAdmin?: boolean
 }
 
 const STATUS_LABEL: Record<Order['status'], string> = {
@@ -20,7 +25,7 @@ const STATUS_LABEL: Record<Order['status'], string> = {
     DISPUTED: 'Disputed',
 }
 
-export function OrderCard({ order, currentUserId, onFollowUp, onCancel, loading, readOnly }: OrderCardProps) {
+export function OrderCard({ order, currentUserId, onFollowUp, onCancel, loading, readOnly, onComplete, completing, isAdmin }: OrderCardProps) {
     const buyer = order.buyer ?? { id: order.buyerId, name: 'Unknown' }
     const total = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const isPending = order.status === 'PENDING'
@@ -43,7 +48,10 @@ export function OrderCard({ order, currentUserId, onFollowUp, onCancel, loading,
             <div className="flex items-center gap-3">
                 <Avatar src={buyer.profile?.avatarUrl} name={buyer.name} size="md" />
                 <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold text-white truncate block">{buyer.name}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-white truncate">
+                        {buyer.name}
+                        {buyer.profile?.verificationStatus === 'VERIFIED' && <VerifiedBadge size="xs" />}
+                    </span>
                     <span className="text-xs text-white/40">
                         {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
                     </span>
@@ -87,6 +95,23 @@ export function OrderCard({ order, currentUserId, onFollowUp, onCancel, loading,
                     >
                        Follow up
                     </button>
+                )
+            )}
+
+            {onComplete && !isClosed && (
+                isAdmin ? (
+                    <button
+                        onClick={onComplete}
+                        disabled={completing}
+                        className="w-full py-2.5 rounded-xl bg-cyan-400 text-black text-sm font-medium
+                            active:bg-cyan-300 transition-colors disabled:opacity-40"
+                    >
+                        {completing ? 'Marking complete…' : 'Mark as Complete'}
+                    </button>
+                ) : (
+                    <div className="w-full py-2.5 rounded-xl border border-white/10 text-white/30 text-xs text-center">
+                        Waiting for the vendor to mark this complete
+                    </div>
                 )
             )}
         </div>

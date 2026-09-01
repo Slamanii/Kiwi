@@ -30,7 +30,7 @@ export function CreateReseekSheet({ seekId, onClose, onSuccess }: CreateReseekSh
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-5">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-5">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
             <div className="relative z-10 w-full max-w-sm bg-neutral-900 rounded-3xl p-6 space-y-4">

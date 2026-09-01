@@ -3,6 +3,13 @@ import { CreateCommunityInput, CommunityRole, CommunityCategory, NotificationTyp
 import { getIO } from '../utils/socket.js'
 import { notify } from './notification.js'
 
+// verificationStatus lives on User, not Profile — merge it into the nested
+// profile object so frontend code can read user.profile?.verificationStatus.
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function createCommunity(
     creatorId: string,
     data: CreateCommunityInput
@@ -96,11 +103,22 @@ export async function joinCommunity(communityId: string, userId: string) {
 export async function getJoinRequests(communityId: string, adminUserId: string) {
     await assertAdmin(communityId, adminUserId)
 
-    return prisma.communityJoinRequest.findMany({
+    const requests = await prisma.communityJoinRequest.findMany({
         where: { communityId, status: 'PENDING' },
-        include: { user: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } } },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    verificationStatus: true,
+                    profile: { select: { avatarUrl: true } }
+                }
+            }
+        },
         orderBy: { createdAt: 'asc' }
     })
+
+    return requests.map(r => ({ ...r, user: mergeVerification(r.user) }))
 }
 
 export async function acceptJoinRequest(communityId: string, requestId: string, adminUserId: string) {

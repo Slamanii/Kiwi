@@ -140,6 +140,7 @@ export default function CommunityOrdersPage() {
                                 key={c.id}
                                 name={c.buyer?.name ?? 'Buyer'}
                                 avatarUrl={c.buyer?.profile?.avatarUrl}
+                                verified={c.buyer?.profile?.verificationStatus === 'VERIFIED'}
                                 lastMessage={c.lastMessage ?? 'No messages yet'}
                                 timestamp={formatRelative(c.lastMessageAt)}
                                 unreadCount={c.unreadCount}

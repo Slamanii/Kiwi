@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { communityApi } from '@/lib/api/community'
 import type { CommunityMember, CommunityMessagingMode } from '@/types'
 
@@ -63,8 +64,11 @@ export function MemberList({ communityId, isAdmin, currentUserId, messagingMode 
                 <div key={m.id} className="flex items-center gap-3 py-2">
                     <Avatar src={m.user.profile?.avatarUrl} name={m.user.name} size="md" />
                     <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
+                        <p className="flex items-center gap-1.5 text-white text-sm font-medium truncate">
                             {m.user.name}{m.userId === currentUserId ? ' (You)' : ''}
+                            {m.user.profile?.verificationStatus === 'VERIFIED' && (
+                                <VerifiedBadge size="xs" />
+                            )}
                         </p>
                         {m.role === 'ADMIN' && (
                             <p className="text-cyan-400 text-[11px] font-medium">Admin</p>

@@ -6,6 +6,12 @@ import type { CreateSeekInput, SeekFeedQuery } from '@kiwi/types'
 import { formatLocation } from '../utils/sorting.js'
 import { notify } from './notification.js'
 
+// verificationStatus lives on User, not Profile — merge it into the nested
+// profile object so frontend code can read author.profile?.verificationStatus.
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
 
 export async function createSeek(userId: string, data: CreateSeekInput) {
     const seek = await prisma.$transaction(async (tx: any) => {
@@ -272,6 +278,7 @@ const where: Prisma.SeekWhereInput = {
           id: true,
           name: true,
           roles: true,
+          verificationStatus: true,
           profile: {
             select: {
               avatarUrl: true,
@@ -287,6 +294,7 @@ const where: Prisma.SeekWhereInput = {
                     select: {
                         id: true,
                         name: true,
+                        verificationStatus: true,
                         profile: { select: { avatarUrl: true } }
                     }
                 }
@@ -305,7 +313,13 @@ const where: Prisma.SeekWhereInput = {
   })
 
   const hasNextPage = seeks.length > limit
-  const data = hasNextPage ? seeks.slice(0, -1) : seeks
+  const data = (hasNextPage ? seeks.slice(0, -1) : seeks).map(seek => ({
+    ...seek,
+    author: mergeVerification(seek.author),
+    originalSeek: seek.originalSeek
+      ? { ...seek.originalSeek, author: mergeVerification(seek.originalSeek.author) }
+      : seek.originalSeek,
+  }))
   const nextCursor = hasNextPage ? data[data.length - 1].id : null
 
   return { data, nextCursor, hasNextPage }
@@ -320,6 +334,7 @@ export async function getSeekById(seekId: string) {
                     id: true,
                     name: true,
                     roles: true,
+                    verificationStatus: true,
                     profile: {
                         select: {
                             avatarUrl: true,
@@ -338,6 +353,7 @@ export async function getSeekById(seekId: string) {
                             id: true,
                             name: true,
                             roles: true,
+                            verificationStatus: true,
                             profile: { select: { avatarUrl: true } }
                         }
                     }
@@ -355,7 +371,13 @@ export async function getSeekById(seekId: string) {
         }
     })
         if (!seek) throw new Error('Seek not found')
-            return seek
+            return {
+                ...seek,
+                author: mergeVerification(seek.author),
+                originalSeek: seek.originalSeek
+                    ? { ...seek.originalSeek, author: mergeVerification(seek.originalSeek.author) }
+                    : seek.originalSeek,
+            }
 }
 
 export async function deleteSeek(seekId: string, userId: string) {
@@ -378,7 +400,7 @@ function mapComment(comment: any) {
     const { user, replies, ...rest } = comment
     return {
         ...rest,
-        author: user,
+        author: mergeVerification(user),
         replies: replies ? replies.map(mapComment) : [],
     }
 }
@@ -406,6 +428,7 @@ export async function addComment(seekId: string, userId: string, content: string
                             select: {
                                 id: true,
                                 name: true,
+                                verificationStatus: true,
                                 profile: {
                                     select: {
                                          avatarUrl: true
@@ -443,6 +466,7 @@ export async function getComments(seekId: string) {
                     select: {
                         id: true,
                         name: true,
+                        verificationStatus: true,
                         profile: {
                             select: { avatarUrl: true }
                         }
@@ -455,6 +479,7 @@ export async function getComments(seekId: string) {
                             select: {
                                 id: true,
                                 name: true,
+                                verificationStatus: true,
                                 profile: { select: { avatarUrl: true } }
                             }
                         }

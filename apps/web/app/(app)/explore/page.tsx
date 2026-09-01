@@ -8,6 +8,7 @@ import { TrendCard } from '@/components/Explore/TrendCard'
 import { TabBar } from '@/components/Explore/TabBar'
 import { AgentCard } from '@/components/profile/AgentCard'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { SeekFeedList } from '@/components/seek/SeekFeedList'
 import { CreateBidSheet } from '@/components/bid/CreateBidSheet'
@@ -133,9 +134,11 @@ export default function ExplorePage() {
         <div className="min-h-screen bg-[#1C1B1A] text-white pb-28">
 
             {/* Search */}
-            <div className="pt-4">
-                <SearchBar value={search} onChange={setSearch} />
-            </div>
+            {tab !== 'marketplace' && (
+                <div className="pt-4">
+                    <SearchBar value={search} onChange={setSearch} />
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="mt-4">
@@ -161,7 +164,7 @@ export default function ExplorePage() {
                                 <Avatar src={u.profile?.avatarUrl} name={u.name} size="sm" />
                                 <span className="text-sm font-semibold text-white">{u.name}</span>
                                 {u.profile?.verificationStatus === 'VERIFIED' && (
-                                    <span className="text-xs text-cyan-400">✓</span>
+                                    <VerifiedBadge size="xs" />
                                 )}
                             </button>
                         ))
@@ -174,7 +177,7 @@ export default function ExplorePage() {
                         <AdBanner
                             title="MyAgent Assistants"
                             subtitle="For enquiries, fraud complaints — reach out here"
-                            onPress={() => router.push('/community/kiwi-support')}
+                            onPress={() => router.push('/communities/cmtcvk2hz003njovscmr7lp2b')}
                         />
                     </div>
 

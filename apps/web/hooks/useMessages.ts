@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSocket } from '@/context/SocketContext'
+import { useSocketRoom } from '@/hooks/useSocketRoom'
 import { useChatUnread } from '@/context/ChatUnreadContext'
 import { messageApi } from '@/lib/api/message'
 import type { Message } from '@/types'
+import type { SendMessageInput } from '@kiwi/types'
 
 function appendUnique(prev: Message[], message: Message) {
     return prev.some(m => m.id === message.id) ? prev : [...prev, message]
@@ -63,11 +65,11 @@ export function useMessages(threadId: string) {
         }
     }, [hasMore, loadingMore, cursor, threadId])
 
-    const sendMessage = useCallback(async (content: string, replyToId?: string) => {
-        if (!content.trim() || sending) return
+    const sendMessage = useCallback(async (input: SendMessageInput) => {
+        if (!(input.content?.trim() || input.mediaUrl) || sending) return
         setSending(true)
         try {
-            const res = await messageApi.sendToThread(threadId, { content, replyToId })
+            const res = await messageApi.sendToThread(threadId, input)
             setMessages(prev => appendUnique(prev, res.data))
         } catch (err) {
             throw err
@@ -153,11 +155,11 @@ export function useDMMessages(userId: string) {
         }
     }, [hasMore, loadingMore, cursor, userId])
 
-    const sendMessage = useCallback(async (content: string, replyToId?: string) => {
-        if (!content.trim() || sending) return
+    const sendMessage = useCallback(async (input: SendMessageInput) => {
+        if (!(input.content?.trim() || input.mediaUrl) || sending) return
         setSending(true)
         try {
-            const res = await messageApi.sendDM(userId, { content, replyToId })
+            const res = await messageApi.sendDM(userId, input)
             setMessages(prev => appendUnique(prev, res.data))
             setConversationId(prev => prev ?? (res.data as Message & { conversationId?: string }).conversationId ?? null)
         } catch (err) {
@@ -167,11 +169,7 @@ export function useDMMessages(userId: string) {
         }
     }, [userId, sending])
 
-    useEffect(() => {
-        if (!socket || !conversationId) return
-        socket.emit('join:dm', conversationId)
-        return () => { socket.emit('leave:dm', conversationId) }
-    }, [socket, conversationId])
+    useSocketRoom(socket, 'join:dm', 'leave:dm', conversationId)
 
     useEffect(() => {
         if (!socket) return
@@ -245,11 +243,11 @@ export function useCommunityMessages(communityId: string) {
         }
     }, [hasMore, loadingMore, cursor, communityId])
 
-    const sendMessage = useCallback(async (content: string, replyToId?: string) => {
-        if (!content.trim() || sending) return
+    const sendMessage = useCallback(async (input: SendMessageInput) => {
+        if (!(input.content?.trim() || input.mediaUrl) || sending) return
         setSending(true)
         try {
-            const res = await messageApi.sendCommunityMessage(communityId, { content, replyToId })
+            const res = await messageApi.sendCommunityMessage(communityId, input)
             setMessages(prev => appendUnique(prev, res.data))
         } catch (err) {
             throw err
@@ -258,11 +256,7 @@ export function useCommunityMessages(communityId: string) {
         }
     }, [communityId, sending])
 
-    useEffect(() => {
-        if (!socket || !communityId) return
-        socket.emit('join:community', communityId)
-        return () => { socket.emit('leave:community', communityId) }
-    }, [socket, communityId])
+    useSocketRoom(socket, 'join:community', 'leave:community', communityId)
 
     useEffect(() => {
         if (!socket) return

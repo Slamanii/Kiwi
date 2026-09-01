@@ -3,6 +3,7 @@
 // components/profile/ProfileCard.tsx
 import { useRef, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { RatingStars } from '@/components/profile/RatingStars'
 import { AvatarCropModal } from '@/components/profile/AvatarCropModal'
 import { AvatarLightbox } from '@/components/profile/AvatarLightbox'
@@ -113,7 +114,12 @@ export function ProfileCard({
                         </div>
 
                         <div className="flex flex-col gap-1">
-                            <span className="text-lg font-bold text-white">{user.name}</span>
+                            <span className="flex items-center gap-1.5 text-lg font-bold text-white">
+                                {user.name}
+                                {user.profile?.verificationStatus === 'VERIFIED' && (
+                                    <VerifiedBadge size="md" />
+                                )}
+                            </span>
                             {user.profile && (
                                 <RatingStars
                                     rating={user.profile.rating}

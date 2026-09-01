@@ -113,6 +113,11 @@ export async function endNegotiation(threadId: string, userId: string) {
             data: { ongoing: { decrement: 1 } }
         })
 
+        await tx.profile.update({
+            where: { userId: thread.clientId },
+            data: { ongoing: { decrement: 1 } }
+        })
+
         await tx.thread.update({
             where: { id: threadId },
             data: { status: ThreadStatus.CLOSED, closedAt: new Date(), endedBy: userId }
@@ -120,7 +125,23 @@ export async function endNegotiation(threadId: string, userId: string) {
     })
 
     getIO().to(`thread:${threadId}`).emit('thread:ended', { threadId, endedBy: userId, reason: 'Fee negotiation ended' })
-    getIO().to(`user:${thread.agentId}`).emit('profile:statsUpdated', { userId: thread.agentId })
+
+    const [agentProfile, clientProfile] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId: thread.agentId } }),
+        prisma.profile.findUnique({ where: { userId: thread.clientId } })
+    ])
+    getIO().to(`profile:${thread.agentId}`).emit('profile:statsUpdated', {
+        userId: thread.agentId,
+        requests: agentProfile?.requests,
+        ongoing: agentProfile?.ongoing,
+        completedDeals: agentProfile?.completedDeals,
+    })
+    getIO().to(`profile:${thread.clientId}`).emit('profile:statsUpdated', {
+        userId: thread.clientId,
+        requests: clientProfile?.requests,
+        ongoing: clientProfile?.ongoing,
+        completedDeals: clientProfile?.completedDeals,
+    })
 
     await notify({
         userId: otherUserId,
@@ -377,6 +398,13 @@ export async function completeAgreement(
             completedDeals: { increment: 1 },
             ongoing: { decrement: 1 }
          }
+    })
+    await tx.profile.update({
+        where: { userId: agreement.thread.clientId },
+        data: {
+            completedDeals: { increment: 1 },
+            ongoing: { decrement: 1 }
+        }
     })
     await tx.thread.update({
         where: { id: agreement.threadId },

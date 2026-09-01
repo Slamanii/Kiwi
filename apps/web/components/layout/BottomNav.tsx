@@ -90,7 +90,7 @@ function getArcPositions(count: number) {
                         `}>
                         <nav className="h-11 bg-[#38353B] backdrop-blur-xl
                                 border border-white/20 shadow-lg rounded-3xl
-                                flex items-center justify-around px-1 overflow-hidden">
+                                flex items-center justify-around px-1">
                             {TABS.map(tab => {
                                 const active = pathname.startsWith(tab.href)
                                 return (
@@ -103,7 +103,7 @@ function getArcPositions(count: number) {
                                         <span className="relative">
                                             <tab.Icon className="w-[18px] h-[18px]" filled={active} />
                                             {tab.href === '/chat' && unreadCount > 0 && (
-                                                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-semibold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-1 leading-none">
+                                                <span className="absolute -top-1.5 -right-2 bg-cyan-400 text-black text-[9px] font-semibold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-1 leading-none">
                                                     {unreadCount > 99 ? '99+' : unreadCount}
                                                 </span>
                                             )}

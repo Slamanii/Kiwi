@@ -1,4 +1,5 @@
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { RatingStars } from '@/components/profile/RatingStars'
 import { User, Profile } from '@/types'
 import { useRouter } from 'next/navigation'
@@ -47,7 +48,8 @@ export function AgentCard({ agent, onMessage, onPress }: AgentCardProps) {
 
                         {isVerified && (
                             <div className="flex items-center gap-1">
-                                <span className="text-xs text-cyan-400 font-medium">✓ Verified</span>
+                                <VerifiedBadge size="xs" />
+                                <span className="text-xs text-cyan-400 font-medium">Verified</span>
                             </div>
                         )}
 

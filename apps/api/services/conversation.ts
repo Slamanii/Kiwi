@@ -2,6 +2,11 @@ import { prisma } from '@kiwi/db'
 import { ConversationType } from '@kiwi/types'
 import { getIO } from '../utils/socket.js'
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function isBlocked(userIdA: string, userIdB: string) {
     const block = await prisma.blockedUser.findFirst({
         where: {
@@ -113,6 +118,7 @@ export async function getConversationPreferences(userId: string) {
 const senderSelect = {
     id: true,
     name: true,
+    verificationStatus: true,
     profile: { select: { avatarUrl: true } }
 } as const
 
@@ -159,7 +165,7 @@ export async function getConversationMedia(userId: string, type: ConversationTyp
     if (hasMore) messages.pop()
 
     return {
-        messages,
+        messages: messages.map((m: any) => ({ ...m, sender: mergeVerification(m.sender) })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -176,7 +182,7 @@ export async function searchConversationMessages(userId: string, type: Conversat
     if (hasMore) messages.pop()
 
     return {
-        messages,
+        messages: messages.map((m: any) => ({ ...m, sender: mergeVerification(m.sender) })),
         nextCursor: hasMore ? messages[messages.length - 1].id : null
     }
 }
@@ -276,9 +282,11 @@ export async function setMessagePinned(userId: string, type: ConversationType, c
         include: { sender: { select: senderSelect } }
     })
 
-    getIO().to(roomName(type, conversationId)).emit(pinned ? 'message:pinned' : 'message:unpinned', { conversationType: type, conversationId, message: updated })
+    const result = { ...updated, sender: mergeVerification(updated.sender) }
 
-    return updated
+    getIO().to(roomName(type, conversationId)).emit(pinned ? 'message:pinned' : 'message:unpinned', { conversationType: type, conversationId, message: result })
+
+    return result
 }
 
 export async function getPinnedMessage(userId: string, type: ConversationType, conversationId: string) {
@@ -287,11 +295,13 @@ export async function getPinnedMessage(userId: string, type: ConversationType, c
     const delegate = messageDelegate(type) as any
     const where = conversationWhere(type, conversationId)
 
-    return delegate.findFirst({
+    const message = await delegate.findFirst({
         where: { ...where, pinned: true },
         orderBy: { pinnedAt: 'desc' },
         include: { sender: { select: senderSelect } }
     })
+
+    return message ? { ...message, sender: mergeVerification(message.sender) } : message
 }
 
 export async function setMessageArchived(userId: string, type: ConversationType, conversationId: string, messageId: string, archived: boolean) {
@@ -309,9 +319,11 @@ export async function setMessageArchived(userId: string, type: ConversationType,
         include: { sender: { select: senderSelect } }
     })
 
-    getIO().to(roomName(type, conversationId)).emit(archived ? 'message:archived' : 'message:unarchived', { conversationType: type, conversationId, message: updated })
+    const result = { ...updated, sender: mergeVerification(updated.sender) }
 
-    return updated
+    getIO().to(roomName(type, conversationId)).emit(archived ? 'message:archived' : 'message:unarchived', { conversationType: type, conversationId, message: result })
+
+    return result
 }
 
 export async function clearConversationMessages(userId: string, type: ConversationType, conversationId: string) {

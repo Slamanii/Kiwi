@@ -27,6 +27,8 @@ export const profileApi = {
         api.get(`/profile/catalog/${itemId}`),
     addCatalogItem: (data: { url: string; type: 'IMAGE' | 'VIDEO'; caption?: string }) =>
         api.post('/profile/catalog', data),
+    updateCatalogItem: (itemId: string, caption?: string) =>
+        api.patch(`/profile/catalog/${itemId}`, { caption }),
     deleteCatalogItem: (itemId: string) =>
         api.delete(`/profile/catalog/${itemId}`),
 }

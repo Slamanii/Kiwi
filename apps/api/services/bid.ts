@@ -4,6 +4,12 @@ import { CreateBidInput } from '@kiwi/types'
 import { getIO } from '../utils/socket.js'
 import { notify } from './notification.js'
 
+// verificationStatus lives on User, not Profile — merge it into the nested
+// profile object so frontend code can read agent.profile?.verificationStatus.
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
 
 export async function createBid(agentId: string, data: CreateBidInput) {
     const user = await prisma.user.findUnique({ where: { id: agentId } })
@@ -38,6 +44,7 @@ export async function createBid(agentId: string, data: CreateBidInput) {
                                 id: true,
                                 name: true,
                                 roles: true,
+                                verificationStatus: true,
                                 profile: {
                                     select: {
                                         avatarUrl: true,
@@ -48,7 +55,7 @@ export async function createBid(agentId: string, data: CreateBidInput) {
                                         policyNote: true,
                                         inspectionFee: true,
                                     }
-                                } 
+                                }
                             }
                         }
                     }
@@ -60,7 +67,7 @@ export async function createBid(agentId: string, data: CreateBidInput) {
                     select: { bidCount: true, authorId: true }
                 })
 
-                return { created, updatedSeek } 
+                return { created: { ...created, agent: mergeVerification(created.agent) }, updatedSeek }
             })
 
             getIO().to(`seek:${data.seekId}`).emit('bid:count', {
@@ -82,7 +89,7 @@ export async function getBidsBySeek(seekId: string, requestingUserId: string) {
     if (!seek) throw new Error('Seek not found')
         if(seek.authorId !== requestingUserId) throw new Error('unauthorized')
 
-            return prisma.bid.findMany({
+            const bids = await prisma.bid.findMany({
                 where: { seekId },
                 orderBy: { createdAt: 'desc' },
                 include: {
@@ -91,6 +98,7 @@ export async function getBidsBySeek(seekId: string, requestingUserId: string) {
                             id: true,
                             name: true,
                             roles: true,
+                            verificationStatus: true,
                             profile: {
                                 select: {
                                     avatarUrl: true,
@@ -107,11 +115,12 @@ export async function getBidsBySeek(seekId: string, requestingUserId: string) {
                     }
                 }
             })
+            return bids.map(bid => ({ ...bid, agent: mergeVerification(bid.agent) }))
 }
 
 
 export async function getMyBids(agentId: string) {
-    return prisma.bid.findMany({
+    const bids = await prisma.bid.findMany({
         where: { agentId },
         orderBy: { createdAt: 'desc' },
         include: {
@@ -130,6 +139,7 @@ export async function getMyBids(agentId: string) {
                         select: {
                             id: true,
                             name: true,
+                            verificationStatus: true,
                             profile: {
                                 select: { avatarUrl: true }
                             }
@@ -139,12 +149,16 @@ export async function getMyBids(agentId: string) {
             }
         }
     })
+    return bids.map(bid => ({
+        ...bid,
+        seek: { ...bid.seek, author: mergeVerification(bid.seek.author) }
+    }))
 }
 
 
 
 export async function getReceivedBids(userId: string) {
-    return prisma.bid.findMany({
+    const bids = await prisma.bid.findMany({
         where: { seek: { authorId: userId } },
         orderBy: { createdAt: 'desc' },
         include: {
@@ -155,6 +169,7 @@ export async function getReceivedBids(userId: string) {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: {
                         select: { avatarUrl: true, rating: true, reviewCount: true }
                     }
@@ -162,6 +177,7 @@ export async function getReceivedBids(userId: string) {
             }
         }
     })
+    return bids.map(bid => ({ ...bid, agent: mergeVerification(bid.agent) }))
 }
 
 export async function getBidById(bidId: string, requestingUserId: string) {
@@ -173,6 +189,7 @@ export async function getBidById(bidId: string, requestingUserId: string) {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: {
                         select: {
                             avatarUrl: true,
@@ -191,7 +208,7 @@ export async function getBidById(bidId: string, requestingUserId: string) {
     const isBiddingAgent = bid.agentId === requestingUserId
     if (!isSeekAuthor && !isBiddingAgent) throw new Error('Unauthorized')
 
-        return bid
+        return { ...bid, agent: mergeVerification(bid.agent) }
 
 }
 export async function updateBidStatus(
@@ -261,6 +278,11 @@ export async function selectBid(bidId: string, clientId: string) {
             data: {  ongoing: { increment: 1 }}
         })
 
+        await tx.profile.update({
+            where: { userId: clientId },
+            data: { ongoing: { increment: 1 } }
+        })
+
         await tx.agreement.create({
             data: {
                 threadId: thread.id,
@@ -289,6 +311,14 @@ export async function selectBid(bidId: string, clientId: string) {
         requests: profile?.requests,
         ongoing: profile?.ongoing,
         completedDeals: profile?.completedDeals,
+    })
+
+    const clientProfile = await prisma.profile.findUnique({ where: { userId: clientId } })
+        getIO().to(`profile:${clientId}`).emit('profile:statsUpdated', {
+        userId: clientId,
+        requests: clientProfile?.requests,
+        ongoing: clientProfile?.ongoing,
+        completedDeals: clientProfile?.completedDeals,
     })
 
      getIO().to(`seek:${bid.seekId}`).emit('seek:bidSelected', {

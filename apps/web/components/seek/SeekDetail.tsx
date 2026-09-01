@@ -1,6 +1,7 @@
 // components/seek/SeekDetailHeader.tsx
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { Button } from '@/components/ui/Button'
 import { Seek } from '@/types'
 import { formatTime } from '@/lib/utils'
@@ -52,7 +53,7 @@ export function SeekDetailHeader({ seek, onViewProfile }: SeekDetailHeaderProps)
                             <span className="text-base font-semibold text-white">
                                 {seek.author.name}
                             </span>
-                            {isVerified && <Badge label="Verified" variant="green" />}
+                            {isVerified && <VerifiedBadge />}
                         </div>
                         <span className="text-xs text-gray-400">
                             Posted {formatTime(seek.createdAt)}
@@ -98,6 +99,9 @@ export function SeekDetailHeader({ seek, onViewProfile }: SeekDetailHeaderProps)
                             <span className="text-xs font-semibold text-white">
                                 {seek.originalSeek.author.name}
                             </span>
+                            {seek.originalSeek.author.profile?.verificationStatus === 'VERIFIED' && (
+                                <VerifiedBadge size="xs" />
+                            )}
                             <span className="text-xs text-gray-500">
                                 {formatTime(seek.originalSeek.createdAt)}
                             </span>

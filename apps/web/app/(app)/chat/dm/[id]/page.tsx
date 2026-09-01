@@ -43,7 +43,8 @@ export default function DMPage() {
                 peerId: other.id,
                 name: other.name,
                 avatarUrl: other.profile?.avatarUrl,
-                onBack: () => router.push('/chat'),
+                verified: other.profile?.verificationStatus === 'VERIFIED',
+                onBack: () => router.back(),
                 onInfo: () => setShowInfo(true),
             }}
             infoPanel={showInfo && conversationId && (
@@ -52,10 +53,11 @@ export default function DMPage() {
                     conversationId={conversationId}
                     name={other.name}
                     avatarUrl={other.profile?.avatarUrl}
+                    verified={other.profile?.verificationStatus === 'VERIFIED'}
                     otherUserId={other.id}
                     onClose={() => setShowInfo(false)}
                     onCleared={() => window.location.reload()}
-                    onBlocked={() => router.push('/chat')}
+                    onBlocked={() => router.back()}
                 />
             )}
         />

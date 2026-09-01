@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { adminApi } from '@/lib/api/admin'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 type SearchResult = {
     id: string
     name: string
     roles: string[]
-    avatarUrl?: string
+    profile?: { avatarUrl?: string | null; verificationStatus?: string | null } | null
 }
 
 export default function AdminManageAdminsPage() {
@@ -69,14 +70,19 @@ export default function AdminManageAdminsPage() {
                         <div key={user.id} className="bg-white/5 rounded-2xl p-4 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <div className="w-9 h-9 rounded-full bg-white/10 overflow-hidden flex items-center justify-center text-xs shrink-0">
-                                    {user.avatarUrl ? (
-                                        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                    {user.profile?.avatarUrl ? (
+                                        <img src={user.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                         user.name[0]
                                     )}
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate">{user.name}</p>
+                                    <p className="flex items-center gap-1.5 text-sm font-medium truncate">
+                                        {user.name}
+                                        {user.profile?.verificationStatus === 'VERIFIED' && (
+                                            <VerifiedBadge size="xs" />
+                                        )}
+                                    </p>
                                     <p className="text-white/40 text-xs truncate">{user.roles.join(', ')}</p>
                                 </div>
                             </div>

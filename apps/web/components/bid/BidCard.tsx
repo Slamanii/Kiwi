@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 import { BidStatus, MediaItem, User } from '@/types'
 import { RatingStars } from '@/components/profile/RatingStars'
 import { MediaViewport } from '@/components/ui/MediaViewport'
@@ -80,11 +81,7 @@ export function BidCard({ bid, currentUserId, displayUser, onAccept, onDecline, 
                         <span className="text-sm font-semibold text-white truncate">
                             {agent.name}
                         </span>
-                        {isVerified && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 shrink-0">
-                                Verified
-                            </span>
-                        )}
+                        {isVerified && <VerifiedBadge className="shrink-0" />}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                        {agent.profile?.rating !== undefined && (

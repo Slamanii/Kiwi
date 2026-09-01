@@ -6,6 +6,7 @@ import { authApi } from '@/lib/api/auth'
 import { uploadApi } from '@/lib/api/upload'
 import { getErrorMessage } from '@/lib/errors'
 import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { BankPicker } from '@/components/ui/BankPicker'
 
 const ID_TYPES = ['NIN', "Voter's Card", "Driver's License", 'International Passport']
 
@@ -190,13 +191,8 @@ export default function AgentApplicationPage() {
                             className={inputClass}
                         />
                     </Field>
-                    <Field label="Bank code">
-                        <input
-                            value={bankCode}
-                            onChange={e => setBankCode(e.target.value)}
-                            placeholder="e.g. 058"
-                            className={inputClass}
-                        />
+                    <Field label="Bank">
+                        <BankPicker value={bankCode} onChange={setBankCode} />
                     </Field>
                     <Field label="Account name">
                         <input

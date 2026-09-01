@@ -2,6 +2,11 @@ import { UserRole, ApplicationStatus, NotificationType, ThreadStatus, AgreementS
 import { prisma } from '@kiwi/db'
 import { notify } from './notification.js'
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function getApplications(status?: ApplicationStatus, cursor?: string, limit = 20) {
     const applications = await prisma.agentApplication.findMany({
         take: limit + 1,
@@ -14,6 +19,7 @@ export async function getApplications(status?: ApplicationStatus, cursor?: strin
                     id: true,
                     name: true,
                     email: true,
+                    verificationStatus: true,
                     profile: {
                         select: { avatarUrl: true, location: true }
                     }
@@ -26,7 +32,7 @@ export async function getApplications(status?: ApplicationStatus, cursor?: strin
     if (hasMore) applications.pop()
 
         return {
-            applications,
+            applications: applications.map(a => ({ ...a, user: mergeVerification(a.user) })),
             nextCursor: hasMore ? applications[applications.length - 1].id : null
         }
 }

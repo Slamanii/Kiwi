@@ -3,6 +3,11 @@ import { getIO } from '../utils/socket.js'
 import { ThreadStatus, AgreementStatus, BidStatus, NotificationType, SeekStatus } from '@kiwi/types'
 import { notify } from './notification.js'
 
+function mergeVerification<T extends { verificationStatus?: any; profile?: any }>(user: T) {
+    const { verificationStatus, profile, ...rest } = user
+    return { ...rest, profile: profile ? { ...profile, verificationStatus } : profile }
+}
+
 export async function getThreadsByUser(userId: string) {
     const threads = await prisma.thread.findMany({
         where: {
@@ -26,6 +31,7 @@ export async function getThreadsByUser(userId: string) {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true } }
                 }
             },
@@ -33,6 +39,7 @@ export async function getThreadsByUser(userId: string) {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: { select: { avatarUrl: true, rating: true } }
                 }
             },
@@ -63,6 +70,8 @@ export async function getThreadsByUser(userId: string) {
 
     return Promise.all(threads.map(async thread => ({
         ...thread,
+        client: mergeVerification(thread.client),
+        agent: mergeVerification(thread.agent),
         unreadCount: await prisma.message.count({
             where: { threadId: thread.id, senderId: { not: userId }, read: false }
         })
@@ -79,13 +88,15 @@ export async function getThreadById(threadId: string, userId: string) {
                 select: {
                     id: true,
                     name: true,
-                    profile: { select: { avatarUrl: true } } 
+                    verificationStatus: true,
+                    profile: { select: { avatarUrl: true } }
                 }
             },
             agent: {
                 select: {
                     id: true,
                     name: true,
+                    verificationStatus: true,
                     profile: {
                         select: {
                             avatarUrl: true,
@@ -94,7 +105,7 @@ export async function getThreadById(threadId: string, userId: string) {
                             rate: true,
                             policyNote: true,
                             inspectionFee: true,
-                        } 
+                        }
                     }
                 }
             },
@@ -105,6 +116,7 @@ export async function getThreadById(threadId: string, userId: string) {
                         select: {
                             id: true,
                             name: true,
+                            verificationStatus: true,
                             profile: { select: { avatarUrl: true } }
                         }
                     }
@@ -121,8 +133,13 @@ export async function getThreadById(threadId: string, userId: string) {
     const isParticipant = thread.clientId === userId || thread.agentId === userId
     if (!isParticipant) throw new Error('Unauthorized')
 
-        return thread
-} 
+        return {
+            ...thread,
+            client: mergeVerification(thread.client),
+            agent: mergeVerification(thread.agent),
+            messages: thread.messages.map(m => ({ ...m, sender: mergeVerification(m.sender) })),
+        }
+}
 
 export async function deleteThread(threadId: string, userId: string) {
     const thread = await prisma.thread.findUnique({
@@ -154,10 +171,32 @@ export async function deleteThread(threadId: string, userId: string) {
             data: { ongoing: { decrement: 1 } }
         })
 
+        await tx.profile.update({
+            where: { userId: thread.clientId },
+            data: { ongoing: { decrement: 1 } }
+        })
+
         await tx.thread.update({
             where: { id: threadId },
             data: { status: ThreadStatus.CLOSED }
         })
+    })
+
+    const [agentProfile, clientProfile] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId: thread.agentId } }),
+        prisma.profile.findUnique({ where: { userId: thread.clientId } })
+    ])
+    getIO().to(`profile:${thread.agentId}`).emit('profile:statsUpdated', {
+        userId: thread.agentId,
+        requests: agentProfile?.requests,
+        ongoing: agentProfile?.ongoing,
+        completedDeals: agentProfile?.completedDeals,
+    })
+    getIO().to(`profile:${thread.clientId}`).emit('profile:statsUpdated', {
+        userId: thread.clientId,
+        requests: clientProfile?.requests,
+        ongoing: clientProfile?.ongoing,
+        completedDeals: clientProfile?.completedDeals,
     })
 }
 
@@ -306,6 +345,11 @@ export async function endThread(
             data: { ongoing: { decrement: 1 } }
         })
 
+        await tx.profile.update({
+            where: { userId: thread.clientId },
+            data: { ongoing: { decrement: 1 } }
+        })
+
         // reopen seek slot if thread was still active
         if (thread.seek && thread.seek.status === 'SELECTING') {
             await tx.seek.update({
@@ -321,7 +365,22 @@ export async function endThread(
         reason: reason ?? null
     })
 
-    getIO().to(`user:${thread.agentId}`).emit('profile:statsUpdated', { userId: thread.agentId })
+    const [agentProfile, clientProfile] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId: thread.agentId } }),
+        prisma.profile.findUnique({ where: { userId: thread.clientId } })
+    ])
+    getIO().to(`profile:${thread.agentId}`).emit('profile:statsUpdated', {
+        userId: thread.agentId,
+        requests: agentProfile?.requests,
+        ongoing: agentProfile?.ongoing,
+        completedDeals: agentProfile?.completedDeals,
+    })
+    getIO().to(`profile:${thread.clientId}`).emit('profile:statsUpdated', {
+        userId: thread.clientId,
+        requests: clientProfile?.requests,
+        ongoing: clientProfile?.ongoing,
+        completedDeals: clientProfile?.completedDeals,
+    })
 
     if (isClient && thread.agreement && !existingReview && rating) {
         getIO().to(`profile:${thread.agentId}`).emit('profile:ratingUpdated', { userId: thread.agentId })

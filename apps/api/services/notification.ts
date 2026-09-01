@@ -60,6 +60,11 @@ function resolveNotificationUrl(
             return metadata?.seekId ? `/seek/${metadata.seekId}` : '/profile/notifications'
 
         case NotificationType.NEW_MESSAGE:
+            if (metadata?.communityId) return `/communities/${metadata.communityId}`
+            if (metadata?.threadId) return `/chat/thread/${metadata.threadId}`
+            if (metadata?.conversationId) return `/chat/dm/${metadata.conversationId}`
+            return '/chat'
+
         case NotificationType.AGREEMENT_SENT:
         case NotificationType.AGREEMENT_ACCEPTED:
         case NotificationType.AGREEMENT_SIGNED:
@@ -93,10 +98,12 @@ function resolveNotificationUrl(
             return metadata?.communityId ? `/communities/${metadata.communityId}/orders` : '/profile/notifications'
 
         case NotificationType.ORDER_MESSAGE:
-            return metadata?.conversationId ? `/orders/${metadata.conversationId}` : '/profile/notifications'
+            if (metadata?.conversationId) return `/orders/${metadata.conversationId}`
+            if (metadata?.communityId) return `/communities/${metadata.communityId}/orders`
+            return '/profile/notifications'
 
         case NotificationType.ORDER_COMPLETED:
-            return metadata?.orderId ? `/orders/${metadata.orderId}/review` : '/profile/notifications'
+            return metadata?.conversationId ? `/orders/${metadata.conversationId}` : '/profile/notifications'
 
         case NotificationType.COMMUNITY_JOIN_REQUEST:
             return metadata?.communityId ? `/communities/${metadata.communityId}/requests` : '/profile/notifications'
@@ -131,7 +138,7 @@ export async function notify(input: NotifyInput) {
     })
 
     await sendPushToUser(userId, {
-        title: pushMessages[type]?.title ?? 'Kasa',
+        title: title ?? pushMessages[type]?.title ?? 'Kasa',
         body,
         data: {
             type,

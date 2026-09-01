@@ -10,7 +10,7 @@ import { ProfileMenuItem } from '@/components/profile/ProfileMenuItem'
 import { profileApi } from '@/lib/api/profile'
 import { uploadApi } from '@/lib/api/upload'
 import { getErrorMessage } from '@/lib/errors'
-import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { MediaViewport } from '@/components/ui/MediaViewport'
 
 type CatalogItem = {
     id: string
@@ -38,8 +38,12 @@ export default function ProfilePage() {
     const [pendingPreviewUrl,  setPendingPreviewUrl]   = useState<string | null>(null)
     const [pendingCaption,     setPendingCaption]      = useState('')
 
-    const [viewingItem,    setViewingItem]    = useState<CatalogItem | null>(null)
-    const [viewerLoading,  setViewerLoading]  = useState(false)
+    const [viewingIndex,   setViewingIndex]   = useState<number | null>(null)
+
+    const [editingItem,    setEditingItem]    = useState<CatalogItem | null>(null)
+    const [editCaption,    setEditCaption]    = useState('')
+    const [editSaving,     setEditSaving]     = useState(false)
+    const [editError,      setEditError]      = useState<string | null>(null)
 
     const catalogFull = catalogLoaded && catalogItems.length >= MAX_CATALOG_ITEMS
 
@@ -118,29 +122,52 @@ export default function ProfilePage() {
         }
     }
 
-    const openViewer = async (item: CatalogItem) => {
-        setViewingItem(item)
-        setViewerLoading(true)
-        try {
-            const res = await profileApi.getCatalogItem(item.id)
-            setViewingItem(res.data)
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setViewerLoading(false)
-        }
-    }
-
     const handleDeleteCatalogItem = async (itemId: string) => {
         const prev = catalogItems
         setCatalogItems(items => items.filter(i => i.id !== itemId))
-        setViewingItem(v => (v?.id === itemId ? null : v))
+        setViewingIndex(null)
         try {
             await profileApi.deleteCatalogItem(itemId)
         } catch (err) {
             console.error(err)
             setCatalogItems(prev)
             setCatalogError('Could not delete catalog item. Please try again.')
+        }
+    }
+
+    const handleShareCatalogItem = (item: CatalogItem) => {
+        if (navigator.share) {
+            navigator.share({ title: 'Kiwi', text: item.caption ?? undefined, url: item.url }).catch(() => {})
+        } else {
+            navigator.clipboard.writeText(item.url)
+        }
+    }
+
+    const handleEditCatalogItem = (item: CatalogItem) => {
+        setEditError(null)
+        setEditCaption(item.caption ?? '')
+        setEditingItem(item)
+    }
+
+    const closeEditor = () => {
+        setEditingItem(null)
+        setEditCaption('')
+        setEditError(null)
+    }
+
+    const handleSaveCaption = async () => {
+        if (!editingItem) return
+        setEditSaving(true)
+        setEditError(null)
+        try {
+            const res = await profileApi.updateCatalogItem(editingItem.id, editCaption.trim() || undefined)
+            setCatalogItems(items => items.map(i => i.id === editingItem.id ? res.data : i))
+            closeEditor()
+        } catch (err) {
+            console.error(err)
+            setEditError(getErrorMessage(err, 'Could not update caption. Please try again.'))
+        } finally {
+            setEditSaving(false)
         }
     }
 
@@ -215,20 +242,20 @@ export default function ProfilePage() {
                 )}
 
                 {catalogOpen && (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                         {catalogLoading ? (
-                            [0, 1, 2, 3].map(i => (
+                            [0, 1, 2, 3, 4, 5].map(i => (
                                 <div key={i} className="aspect-square bg-white/5 rounded-2xl animate-pulse" />
                             ))
                         ) : catalogItems.length === 0 ? (
-                            <div className="col-span-2 py-10 text-center">
+                            <div className="col-span-3 py-10 text-center">
                                 <p className="text-white/25 text-sm">No catalog items yet. Tap + to add one.</p>
                             </div>
                         ) : (
-                            catalogItems.map(item => (
+                            catalogItems.map((item, i) => (
                                 <button
                                     key={item.id}
-                                    onClick={() => openViewer(item)}
+                                    onClick={() => setViewingIndex(i)}
                                     className="relative aspect-square bg-[#1c1c1e] rounded-2xl overflow-hidden text-left"
                                 >
                                     {item.type === 'VIDEO' ? (
@@ -284,7 +311,7 @@ export default function ProfilePage() {
 
             {/* Add-to-catalog composer */}
             {pendingFile && pendingPreviewUrl && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center sm:justify-center">
+                <div className="fixed inset-0 z-[100] bg-black/80 flex items-end sm:items-center sm:justify-center">
                     <div className="w-full sm:max-w-sm bg-[#1c1c1e] rounded-t-3xl sm:rounded-3xl p-4 space-y-3">
                         <div className="aspect-square rounded-2xl overflow-hidden bg-black">
                             {pendingFile.type.startsWith('video/') ? (
@@ -324,37 +351,56 @@ export default function ProfilePage() {
                 </div>
             )}
 
-            {/* Catalog item viewer */}
-            {viewingItem && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/90 flex flex-col"
-                    onClick={() => setViewingItem(null)}
-                >
-                    <div className="flex justify-end p-4">
-                        <button
-                            onClick={() => setViewingItem(null)}
-                            aria-label="Close"
-                            className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white active:opacity-70"
-                        >
-                            <ChevronLeftIcon className="w-5 h-5" />
-                        </button>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
-                        {viewingItem.type === 'VIDEO' ? (
-                            <video src={viewingItem.url} className="max-w-full max-h-full rounded-2xl" controls autoPlay playsInline />
-                        ) : (
-                            <img src={viewingItem.url} alt={viewingItem.caption ?? ''} className="max-w-full max-h-full rounded-2xl object-contain" />
-                        )}
-                    </div>
-                    {(viewingItem.caption || viewerLoading) && (
-                        <div className="px-6 pb-10 pt-2" onClick={(e) => e.stopPropagation()}>
-                            {viewerLoading ? (
-                                <p className="text-white/30 text-sm text-center">Loading...</p>
-                            ) : (
-                                <p className="text-white/80 text-sm text-center">{viewingItem.caption}</p>
-                            )}
+            {viewingIndex !== null && (
+                <MediaViewport
+                    items={catalogItems.map(item => ({
+                        type: item.type === 'VIDEO' ? 'video' as const : 'image' as const,
+                        url: item.url,
+                        caption: item.caption,
+                    }))}
+                    initialIndex={viewingIndex}
+                    onClose={() => setViewingIndex(null)}
+                    onShare={(_, i) => handleShareCatalogItem(catalogItems[i])}
+                    onEdit={(_, i) => handleEditCatalogItem(catalogItems[i])}
+                    onDelete={(_, i) => handleDeleteCatalogItem(catalogItems[i].id)}
+                />
+            )}
+
+            {/* Edit-caption sheet */}
+            {editingItem && (
+                <div className="fixed inset-0 z-[100] bg-black/80 flex items-end sm:items-center sm:justify-center">
+                    <div className="w-full sm:max-w-sm bg-[#1c1c1e] rounded-t-3xl sm:rounded-3xl p-4 space-y-3">
+                        <p className="text-white text-sm font-medium">Edit caption</p>
+                        <textarea
+                            value={editCaption}
+                            onChange={(e) => setEditCaption(e.target.value)}
+                            maxLength={1000}
+                            placeholder="Write something about this item..."
+                            rows={3}
+                            autoFocus
+                            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2
+                                text-sm text-white placeholder:text-white/30 resize-none focus:outline-none"
+                        />
+                        {editError && <p className="text-red-400 text-xs">{editError}</p>}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={closeEditor}
+                                disabled={editSaving}
+                                className="flex-1 py-3 rounded-full border border-white/15
+                                    text-white/70 text-sm font-medium active:opacity-70 disabled:opacity-40"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveCaption}
+                                disabled={editSaving}
+                                className="flex-1 py-3 rounded-full bg-blue-500
+                                    text-white text-sm font-medium active:opacity-70 disabled:opacity-40"
+                            >
+                                {editSaving ? 'Saving...' : 'Save'}
+                            </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>

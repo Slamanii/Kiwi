@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { referralApi } from '@/lib/api/referral'
 import { ChevronLeftIcon } from '@/components/ui/Icons'
+import { VerifiedBadge } from '@/components/ui/VerifiedBadge'
 
 type ReferralStats = { total: number; paid: number; pending: number }
 
@@ -16,7 +17,7 @@ type ReferralEntry = {
     referred: {
         id: string
         name: string
-        profile?: { avatarUrl?: string | null } | null
+        profile?: { avatarUrl?: string | null; verificationStatus?: string | null } | null
     }
 }
 
@@ -126,7 +127,12 @@ export default function ReferralPage() {
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{r.referred.name}</p>
+                                        <p className="flex items-center gap-1.5 text-sm font-medium truncate">
+                                            {r.referred.name}
+                                            {r.referred.profile?.verificationStatus === 'VERIFIED' && (
+                                                <VerifiedBadge size="xs" />
+                                            )}
+                                        </p>
                                         <p className="text-xs text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p>
                                     </div>
                                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${r.paid ? 'bg-green-500/15 text-green-400' : 'bg-white/8 text-white/40'}`}>

@@ -78,8 +78,9 @@ export default function ThreadPage() {
                     peerId: other.id,
                     name: other.name,
                     avatarUrl: other.profile?.avatarUrl,
+                    verified: other.profile?.verificationStatus === 'VERIFIED',
                     subtitle: isClosed ? 'Thread closed' : thread.agreement?.status ?? 'Active',
-                    onBack: () => router.push('/chat'),
+                    onBack: () => router.back(),
                     onInfo: () => setShowInfo(true),
                 }}
                 infoPanel={showInfo && (
@@ -88,6 +89,7 @@ export default function ThreadPage() {
                         conversationId={id}
                         name={other.name}
                         avatarUrl={other.profile?.avatarUrl}
+                        verified={other.profile?.verificationStatus === 'VERIFIED'}
                         onClose={() => setShowInfo(false)}
                     />
                 )}

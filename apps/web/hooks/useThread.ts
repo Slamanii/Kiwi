@@ -3,6 +3,7 @@
 import { threadApi } from '@/lib/api/thread'
 import { useState, useEffect } from 'react'
 import { useSocket } from '@/context/SocketContext'
+import { useSocketRoom } from '@/hooks/useSocketRoom'
 import type { ThreadDetail } from '@/types'
 
 export function useThread(threadId: string) {
@@ -20,11 +21,7 @@ export function useThread(threadId: string) {
                  .finally(() => setLoading(false))
     }, [threadId])
 
-    useEffect(() => {
-        if (!socket || !threadId) return 
-        socket.emit('join:thread', threadId)
-        return () => { socket.emit('leave:thread', threadId) }
-    }, [socket, threadId])
+    useSocketRoom(socket, 'join:thread', 'leave:thread', threadId)
 
     useEffect(() => {
         if (!socket) return
