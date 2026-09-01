@@ -115,7 +115,7 @@ export function EditProfileSheet({ open, user, onClose, onSave }: EditProfileShe
             </div>
 
             {/* Form */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto">
                 <EditField
                     label="Name"
                     value={form.name}

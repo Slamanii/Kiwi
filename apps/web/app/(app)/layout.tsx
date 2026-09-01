@@ -25,7 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <ChatUnreadProvider>
             <div className="relative h-dvh flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                 <PushNotificationManager />
-                <main id="main-scroll" className={`flex-1 ${isFullscreen ? 'overflow-hidden' : 'overflow-y-auto pb-24'}`}>
+                <main id="main-scroll" className={`flex-1 overflow-y-auto ${isFullscreen ? '' : 'pb-24'}`}>
                     {children}
                 </main>
                 {!isFullscreen && <BottomNav />}

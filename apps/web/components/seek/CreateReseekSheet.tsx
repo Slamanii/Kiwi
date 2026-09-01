@@ -33,7 +33,7 @@ export function CreateReseekSheet({ seekId, onClose, onSuccess }: CreateReseekSh
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-5">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-            <div className="relative z-10 w-full max-w-sm bg-neutral-900 rounded-3xl p-6 space-y-4">
+            <div className="relative z-10 w-full max-w-sm max-h-[85vh] overflow-y-auto bg-neutral-900 rounded-3xl p-6 space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-white font-semibold text-base">Reseek</h2>
                     <button

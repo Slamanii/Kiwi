@@ -268,15 +268,6 @@ export default function ProfilePage() {
                                             <p className="text-white/90 text-xs line-clamp-2">{item.caption}</p>
                                         </div>
                                     )}
-                                    <span
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteCatalogItem(item.id) }}
-                                        aria-label="Delete catalog item"
-                                        role="button"
-                                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60
-                                            flex items-center justify-center text-white/80 text-xs active:opacity-70"
-                                    >
-                                        ✕
-                                    </span>
                                 </button>
                             ))
                         )}
